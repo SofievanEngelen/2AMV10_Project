@@ -109,9 +109,9 @@ export default function UmapPanel({
   return (
     <div className="umap-panel-inner">
       <p className="umap-description">
-        Adjust values like sleep, study time, or screen time to see how the
-        prediction changes. The system updates the outcome and shows where the
-        student would move in the UMAP.
+        This view groups similar students together based on their features. Nearby points represent similar behaviors,
+        while distant points are more different. Select a point or cluster to explore what influences their stress or
+        productivity.
       </p>
 
       <div className="umap-plot-wrap">
