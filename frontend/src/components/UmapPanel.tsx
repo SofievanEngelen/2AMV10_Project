@@ -1,8 +1,8 @@
 import PlotModule from "react-plotly.js";
-import "../App.css"
+import "../App.css";
 import type { PlotSelectionEvent, PlotMouseEvent } from "plotly.js";
+import {useEffect, useRef} from "react";
 import type { StudentPoint } from "../Dashboard";
-
 
 const Plot = (PlotModule as any).default ?? PlotModule;
 
@@ -21,6 +21,27 @@ type Props = {
   onClearSelection: () => void;
 };
 
+const colourOptions = [
+  { value: "burnout_level", label: "Burnout level" },
+  { value: "productivity_score", label: "Productivity score" },
+  { value: "exam_score", label: "Exam score" },
+  { value: "study_hours", label: "Study hours" },
+  { value: "self_study_hours", label: "Self study hours" },
+  { value: "online_classes_hours", label: "Online classes hours" },
+  { value: "social_media_hours", label: "Social media hours" },
+  { value: "gaming_hours", label: "Gaming hours" },
+  { value: "sleep_hours", label: "Sleep hours" },
+  { value: "screen_time_hours", label: "Screen time hours" },
+  { value: "exercise_minutes", label: "Exercise minutes" },
+  { value: "caffeine_intake_mg", label: "Caffeine intake" },
+  { value: "mental_health_score", label: "Mental health score" },
+  { value: "focus_index", label: "Focus index" },
+  { value: "age", label: "Age" },
+  { value: "part_time_job", label: "Part-time job" },
+  { value: "upcoming_deadline", label: "Upcoming deadline" },
+  { value: "cluster", label: "Cluster" },
+] as const;
+
 export default function UmapPanel({
   data,
   colourBy,
@@ -30,20 +51,13 @@ export default function UmapPanel({
   onClusterSelect,
   onClearSelection,
 }: Props) {
+
+
+  const suppressClickRef = useRef(false);
+
   const colourValues = data.map((d) => {
-    switch (colourBy) {
-      case "productivity":
-        return d.productivity;
-      case "sleep":
-        return d.sleep;
-      case "study_hours":
-        return d.study_hours;
-      case "phone_usage":
-        return d.phone_usage;
-      case "stress":
-      default:
-        return d.stress;
-    }
+    const value = d[colourBy as keyof StudentPoint];
+    return typeof value === "number" ? value : 0;
   });
 
   const selectedIds =
@@ -58,16 +72,19 @@ export default function UmapPanel({
     .filter((i) => i !== -1);
 
   const handleClick = (event: Readonly<PlotMouseEvent>) => {
+    if (suppressClickRef.current) return;
+
     const p = event.points?.[0];
     if (!p) return;
+
     const pointIndex = p.pointIndex;
     if (pointIndex == null) return;
+
     onPointSelect(data[pointIndex]);
   };
 
   const handleSelected = (event: Readonly<PlotSelectionEvent>) => {
     if (!event?.points || event.points.length === 0) {
-      onClearSelection();
       return;
     }
 
@@ -79,16 +96,24 @@ export default function UmapPanel({
       )
     );
 
+    if (unique.length === 0) return;
+
+    suppressClickRef.current = true;
+    window.setTimeout(() => {
+      suppressClickRef.current = false;
+    }, 150);
+
     onClusterSelect(unique.map((i) => data[i]));
   };
 
   return (
     <div className="umap-panel-inner">
       <p className="umap-description">
-        Adjust values like sleep, study time, or phone usage to see how the
-        prediction changes. The system updates the outcome and shows where the
-        student would move in the UMAP.
+        This view groups similar students together based on their features. Nearby points represent similar behaviors,
+        while distant points are more different. Select a point or cluster to explore what influences their stress or
+        productivity.
       </p>
+
       <div className="umap-plot-wrap">
         <Plot
           data={[
@@ -108,8 +133,8 @@ export default function UmapPanel({
                   orientation: "h",
                   x: 0.5,
                   xanchor: "center",
-                  y: -0.2,
-                  len: 0.65,
+                  y: -0.15,
+                  len: 1,
                   thickness: 12,
                 },
                 line: {
@@ -135,7 +160,7 @@ export default function UmapPanel({
           layout={{
             autosize: true,
             dragmode: "lasso",
-            margin: { l: 40, r: 10, t: 20, b: 90 },
+            margin: { l: 15, r: 15, t: 20, b: 90 },
             paper_bgcolor: "#d9d9d9",
             plot_bgcolor: "#d9d9d9",
           }}
@@ -165,11 +190,11 @@ export default function UmapPanel({
           value={colourBy}
           onChange={(e) => onColourByChange(e.target.value)}
         >
-          <option value="stress">Stress level</option>
-          <option value="productivity">Productivity</option>
-          <option value="sleep">Sleep hours</option>
-          <option value="study_hours">Study hours</option>
-          <option value="phone_usage">Phone usage</option>
+          {colourOptions.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
         </select>
 
         <button className="clear-selection-btn" onClick={onClearSelection}>
