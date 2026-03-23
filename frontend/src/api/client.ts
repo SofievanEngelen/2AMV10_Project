@@ -1,30 +1,66 @@
-export type PredictionRequest = {
-  study_hours: number;
-  sleep_hours: number;
-  smartphone_hours: number;
-  stress_level: number;
-};
+import type {
+  ClusterSummaryResponse,
+  CounterfactualResponse,
+  FeatureImportanceResponse,
+  LocalExplanationResponse,
+  PredictRequest,
+  PredictionResponse,
+  Target,
+  UmapResponse,
+} from "./types";
 
-export type PredictionResponse = {
-  productivity_score: number;
-  risk_level: string;
-  contributions: Record<string, number>;
-};
+const API_URL = import.meta.env.VITE_API_URL ?? "http://127.0.0.1:8000";
 
-const API_URL = import.meta.env.VITE_API_URL;
-
-export async function predictStudent(input: unknown) {
-  const response = await fetch("http://127.0.0.1:8000/predict", {
-    method: "POST",
+async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
+  const response = await fetch(`${API_URL}${path}`, {
     headers: {
       "Content-Type": "application/json",
+      ...(init?.headers ?? {}),
     },
-    body: JSON.stringify(input),
+    ...init,
   });
 
   if (!response.ok) {
-    throw new Error("Prediction request failed");
+    const text = await response.text();
+    throw new Error(`${path} failed: ${response.status} ${text}`);
   }
 
-  return response.json();
+  return response.json() as Promise<T>;
+}
+
+export function fetchUmap() {
+  return apiFetch<UmapResponse>("/model/umap");
+}
+
+export function fetchFeatureImportance(target: Target) {
+  return apiFetch<FeatureImportanceResponse>(
+    `/model/feature-importance/${target}`
+  );
+}
+
+export function fetchPrediction(payload: PredictRequest) {
+  return apiFetch<PredictionResponse>("/model/predict", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function fetchLocalExplanation(payload: PredictRequest) {
+  return apiFetch<LocalExplanationResponse>("/model/local-explanation", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function fetchCounterfactuals(payload: PredictRequest) {
+  return apiFetch<CounterfactualResponse>("/model/counterfactual", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function fetchClusterSummary(clusterId: number) {
+  return apiFetch<ClusterSummaryResponse>(
+    `/model/cluster-summary/${clusterId}`
+  );
 }

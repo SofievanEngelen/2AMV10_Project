@@ -3,21 +3,23 @@ from pydantic import BaseModel
 
 
 class PredictionInput(BaseModel):
-    Age: int = 21
-    Gender: str = "Female"
-    Study_Hours_Per_Day: float = 4.0
-    Study_Consistency: str = "Medium"
-    Preferred_Study_Time: str = "Evening"
-    Smartphone_Usage_Hours: float = 5.0
-    Social_Media_Usage_Hours: float = 2.5
-    Gaming_Hours: float = 1.0
-    Notification_Frequency: int = 45
-    Sleep_Hours: float = 7.0
-    Physical_Activity_Level: str = "Moderate"
-    Focus_Score: float = 70.0
-    Attendance_Percentage: float = 85.0
-    Assignment_Completion_Rate: float = 88.0
-
+    age: int = 21
+    gender: str = "Female"
+    academic_level: str = "Undergraduate"
+    study_hours: float = 4.0
+    self_study_hours: float = 2.0
+    online_classes_hours: float = 2.0
+    social_media_hours: float = 2.5
+    gaming_hours: float = 1.0
+    sleep_hours: float = 7.0
+    screen_time_hours: float = 6.0
+    exercise_minutes: int = 45
+    caffeine_intake_mg: int = 120
+    part_time_job: int = 0
+    upcoming_deadline: int = 1
+    internet_quality: str = "Good"
+    mental_health_score: float = 7.0
+    focus_index: float = 70.0
 
 class PredictRequest(BaseModel):
     target: Literal["burnout_level", "productivity_score", "exam_score"]
@@ -66,8 +68,28 @@ class UmapPoint(BaseModel):
     x: float
     y: float
     cluster: int
+
     burnout_level: float
     productivity_score: float
+    exam_score: float
+
+    age: int
+    gender: str
+    academic_level: str
+    study_hours: float
+    self_study_hours: float
+    online_classes_hours: float
+    social_media_hours: float
+    gaming_hours: float
+    sleep_hours: float
+    screen_time_hours: float
+    exercise_minutes: float
+    caffeine_intake_mg: float
+    part_time_job: int
+    upcoming_deadline: int
+    internet_quality: str
+    mental_health_score: float
+    focus_index: float
 
 
 class UmapResponse(BaseModel):

@@ -33,8 +33,28 @@ def compute_umap_placeholder(df: pd.DataFrame) -> List[dict]:
                 "x": float(px),
                 "y": float(py),
                 "cluster": int(cl) if pd.notna(cl) else 0,
+
                 "burnout_level": float(row["burnout_level"]),
                 "productivity_score": float(row["productivity_score"]),
+                "exam_score": float(row["exam_score"]),
+
+                "age": int(row["age"]),
+                "gender": str(row["gender"]),
+                "academic_level": str(row["academic_level"]),
+                "study_hours": float(row["study_hours"]),
+                "self_study_hours": float(row["self_study_hours"]),
+                "online_classes_hours": float(row["online_classes_hours"]),
+                "social_media_hours": float(row["social_media_hours"]),
+                "gaming_hours": float(row["gaming_hours"]),
+                "sleep_hours": float(row["sleep_hours"]),
+                "screen_time_hours": float(row["screen_time_hours"]),
+                "exercise_minutes": float(row["exercise_minutes"]),
+                "caffeine_intake_mg": float(row["caffeine_intake_mg"]),
+                "part_time_job": int(row["part_time_job"]),
+                "upcoming_deadline": int(row["upcoming_deadline"]),
+                "internet_quality": str(row["internet_quality"]),
+                "mental_health_score": float(row["mental_health_score"]),
+                "focus_index": float(row["focus_index"]),
             }
         )
 
@@ -44,85 +64,90 @@ def compute_umap_placeholder(df: pd.DataFrame) -> List[dict]:
 def get_global_feature_importance_placeholder(target: str) -> List[dict]:
     by_target = {
         "burnout_level": [
-            ("Sleep_Hours", 0.20),
-            ("Social_Media_Usage_Hours", 0.18),
-            ("Notification_Frequency", 0.16),
-            ("Gaming_Hours", 0.12),
-            ("Study_Hours_Per_Day", 0.10),
-            ("Focus_Score", 0.09),
-            ("Smartphone_Usage_Hours", 0.08),
-            ("Attendance_Percentage", 0.04),
-            ("Assignment_Completion_Rate", 0.03),
+            ("sleep_hours", 0.20),
+            ("social_media_hours", 0.18),
+            ("screen_time_hours", 0.16),
+            ("gaming_hours", 0.12),
+            ("study_hours", 0.10),
+            ("focus_index", 0.09),
+            ("self_study_hours", 0.08),
+            ("mental_health_score", 0.04),
+            ("exercise_minutes", 0.03),
         ],
         "productivity_score": [
-            ("Sleep_Hours", 0.19),
-            ("Focus_Score", 0.17),
-            ("Study_Hours_Per_Day", 0.15),
-            ("Notification_Frequency", 0.11),
-            ("Smartphone_Usage_Hours", 0.10),
-            ("Social_Media_Usage_Hours", 0.09),
-            ("Attendance_Percentage", 0.08),
-            ("Assignment_Completion_Rate", 0.07),
-            ("Gaming_Hours", 0.04),
+            ("sleep_hours", 0.19),
+            ("focus_index", 0.17),
+            ("study_hours", 0.15),
+            ("self_study_hours", 0.11),
+            ("screen_time_hours", 0.10),
+            ("social_media_hours", 0.09),
+            ("mental_health_score", 0.08),
+            ("online_classes_hours", 0.07),
+            ("gaming_hours", 0.04),
         ],
         "exam_score": [
-            ("Focus_Score", 0.20),
-            ("Study_Hours_Per_Day", 0.18),
-            ("Assignment_Completion_Rate", 0.15),
-            ("Attendance_Percentage", 0.12),
-            ("Sleep_Hours", 0.11),
-            ("Social_Media_Usage_Hours", 0.08),
-            ("Gaming_Hours", 0.07),
-            ("Notification_Frequency", 0.05),
-            ("Smartphone_Usage_Hours", 0.04),
+            ("focus_index", 0.20),
+            ("study_hours", 0.18),
+            ("self_study_hours", 0.15),
+            ("online_classes_hours", 0.12),
+            ("sleep_hours", 0.11),
+            ("mental_health_score", 0.08),
+            ("gaming_hours", 0.07),
+            ("social_media_hours", 0.05),
+            ("screen_time_hours", 0.04),
         ],
     }
+
     values = by_target[target]
     return [{"feature": f, "importance": v} for f, v in values]
-
 
 def predict_placeholder(target: str, payload: Dict) -> Dict:
     if target == "burnout_level":
         value = (
-            payload["Social_Media_Usage_Hours"] * 3
-            + payload["Gaming_Hours"] * 2
-            + payload["Notification_Frequency"] * 0.1
-            - payload["Sleep_Hours"] * 2
-            - payload["Study_Hours_Per_Day"] * 1.5
+            20
+            + payload["social_media_hours"] * 4.0
+            + payload["gaming_hours"] * 3.0
+            + payload["screen_time_hours"] * 1.5
+            + payload["upcoming_deadline"] * 8.0
+            - payload["sleep_hours"] * 2.2
+            - payload["study_hours"] * 1.0
+            - payload["mental_health_score"] * 1.8
+            - payload["exercise_minutes"] * 0.03
         )
-        value = max(0.0, min(100.0, value))
         confidence = 0.77
 
     elif target == "productivity_score":
         value = (
-            payload["Sleep_Hours"] * 6
-            + payload["Study_Hours_Per_Day"] * 5
-            + payload["Focus_Score"] * 0.5
-            + payload["Attendance_Percentage"] * 0.2
-            - payload["Social_Media_Usage_Hours"] * 3
-            - payload["Gaming_Hours"] * 2
+            25
+            + payload["study_hours"] * 4.0
+            + payload["self_study_hours"] * 3.0
+            + payload["focus_index"] * 0.35
+            + payload["mental_health_score"] * 2.0
+            + payload["sleep_hours"] * 2.5
+            - payload["social_media_hours"] * 2.0
+            - payload["gaming_hours"] * 1.2
+            - payload["screen_time_hours"] * 1.0
         )
-        value = max(0.0, min(100.0, value))
         confidence = 0.78
 
     elif target == "exam_score":
-        productivity_proxy = (
-            payload["Sleep_Hours"] * 5
-            + payload["Study_Hours_Per_Day"] * 5
-            + payload["Focus_Score"] * 0.4
-            - payload["Social_Media_Usage_Hours"] * 2
-            - payload["Gaming_Hours"] * 1.5
-        )
         value = (
-            productivity_proxy * 0.55
-            + payload["Focus_Score"] * 0.30
-            + payload["Assignment_Completion_Rate"] * 0.15
+            20
+            + payload["study_hours"] * 4.5
+            + payload["self_study_hours"] * 2.5
+            + payload["online_classes_hours"] * 1.5
+            + payload["focus_index"] * 0.30
+            + payload["mental_health_score"] * 1.2
+            + payload["sleep_hours"] * 1.0
+            - payload["social_media_hours"] * 1.0
+            - payload["gaming_hours"] * 0.8
         )
-        value = max(0.0, min(100.0, value))
         confidence = 0.76
 
     else:
         raise ValueError(f"Unsupported target: {target}")
+
+    value = max(0.0, min(100.0, value))
 
     return {
         "target": target,
@@ -133,111 +158,126 @@ def predict_placeholder(target: str, payload: Dict) -> Dict:
 
 
 def explain_local_placeholder(target: str, payload: Dict) -> Dict[str, float]:
+    contributions = {}
+
     if target == "burnout_level":
-        return {
-            "Sleep_Hours": round((7.5 - payload["Sleep_Hours"]) * 3.2, 2),
-            "Study_Hours_Per_Day": round((4.0 - payload["Study_Hours_Per_Day"]) * 1.8, 2),
-            "Social_Media_Usage_Hours": round(payload["Social_Media_Usage_Hours"] * 2.5, 2),
-            "Gaming_Hours": round(payload["Gaming_Hours"] * 1.8, 2),
-            "Notification_Frequency": round(payload["Notification_Frequency"] * 0.08, 2),
-            "Focus_Score": round((65 - payload["Focus_Score"]) * 0.12, 2),
+        contributions = {
+            "sleep_hours": (7.5 - payload["sleep_hours"]) * 2.5,
+            "social_media_hours": payload["social_media_hours"] * 2.0,
+            "gaming_hours": payload["gaming_hours"] * 1.6,
+            "screen_time_hours": payload["screen_time_hours"] * 1.2,
+            "upcoming_deadline": payload["upcoming_deadline"] * 6.0,
+            "mental_health_score": (5.0 - payload["mental_health_score"]) * 2.2,
+            "exercise_minutes": -payload["exercise_minutes"] * 0.03,
+            "focus_index": -payload["focus_index"] * 0.04,
         }
 
-    if target == "productivity_score":
-        return {
-            "Sleep_Hours": round((payload["Sleep_Hours"] - 7.0) * 4.0, 2),
-            "Study_Hours_Per_Day": round((payload["Study_Hours_Per_Day"] - 4.0) * 3.0, 2),
-            "Smartphone_Usage_Hours": round((5.0 - payload["Smartphone_Usage_Hours"]) * 2.5, 2),
-            "Social_Media_Usage_Hours": round((2.0 - payload["Social_Media_Usage_Hours"]) * 2.0, 2),
-            "Gaming_Hours": round((1.0 - payload["Gaming_Hours"]) * 1.5, 2),
-            "Notification_Frequency": round((40 - payload["Notification_Frequency"]) * 0.15, 2),
-            "Focus_Score": round((payload["Focus_Score"] - 65) * 0.35, 2),
-            "Attendance_Percentage": round((payload["Attendance_Percentage"] - 80) * 0.12, 2),
-            "Assignment_Completion_Rate": round((payload["Assignment_Completion_Rate"] - 80) * 0.12, 2),
+    elif target == "productivity_score":
+        contributions = {
+            "study_hours": (payload["study_hours"] - 4.0) * 3.0,
+            "self_study_hours": (payload["self_study_hours"] - 2.0) * 2.2,
+            "focus_index": payload["focus_index"] * 0.25,
+            "sleep_hours": payload["sleep_hours"] * 1.8,
+            "mental_health_score": payload["mental_health_score"] * 1.5,
+            "social_media_hours": -payload["social_media_hours"] * 1.8,
+            "gaming_hours": -payload["gaming_hours"] * 1.2,
+            "screen_time_hours": -payload["screen_time_hours"] * 1.0,
         }
 
-    if target == "exam_score":
-        return {
-            "Study_Hours_Per_Day": round((payload["Study_Hours_Per_Day"] - 4.0) * 3.0, 2),
-            "Focus_Score": round((payload["Focus_Score"] - 65) * 0.40, 2),
-            "Assignment_Completion_Rate": round((payload["Assignment_Completion_Rate"] - 80) * 0.18, 2),
-            "Attendance_Percentage": round((payload["Attendance_Percentage"] - 80) * 0.15, 2),
-            "Sleep_Hours": round((payload["Sleep_Hours"] - 7.0) * 1.8, 2),
-            "Social_Media_Usage_Hours": round((2.0 - payload["Social_Media_Usage_Hours"]) * 1.4, 2),
+    elif target == "exam_score":
+        contributions = {
+            "study_hours": payload["study_hours"] * 3.5,
+            "self_study_hours": payload["self_study_hours"] * 2.2,
+            "online_classes_hours": payload["online_classes_hours"] * 1.5,
+            "focus_index": payload["focus_index"] * 0.28,
+            "sleep_hours": payload["sleep_hours"] * 1.2,
+            "mental_health_score": payload["mental_health_score"] * 1.0,
+            "social_media_hours": -payload["social_media_hours"] * 1.0,
+            "gaming_hours": -payload["gaming_hours"] * 0.8,
         }
 
-    raise ValueError(f"Unsupported target: {target}")
+    else:
+        raise ValueError(f"Unsupported target: {target}")
 
+    # normalize for nicer visualization
+    max_abs = max(abs(v) for v in contributions.values()) or 1
+
+    contributions = {
+        k: round(v / max_abs, 3)
+        for k, v in contributions.items()
+    }
+
+    return contributions
 
 def generate_counterfactual_placeholder(target: str, payload: Dict) -> List[dict]:
     suggestions = []
 
     if target == "burnout_level":
-        if payload["Sleep_Hours"] < 8:
+        if payload["sleep_hours"] < 8:
             suggestions.append({
-                "feature": "Sleep_Hours",
-                "current_value": payload["Sleep_Hours"],
-                "suggested_value": min(8.0, payload["Sleep_Hours"] + 1.0),
+                "feature": "sleep_hours",
+                "current_value": payload["sleep_hours"],
+                "suggested_value": min(8.0, payload["sleep_hours"] + 1.0),
                 "expected_effect": "Lower predicted burnout",
             })
-        if payload["Notification_Frequency"] > 30:
+        if payload["social_media_hours"] > 2:
             suggestions.append({
-                "feature": "Notification_Frequency",
-                "current_value": payload["Notification_Frequency"],
-                "suggested_value": max(20, payload["Notification_Frequency"] - 15),
-                "expected_effect": "Reduce overload and lower burnout",
-            })
-        if payload["Social_Media_Usage_Hours"] > 2:
-            suggestions.append({
-                "feature": "Social_Media_Usage_Hours",
-                "current_value": payload["Social_Media_Usage_Hours"],
-                "suggested_value": round(max(1.0, payload["Social_Media_Usage_Hours"] - 1.0), 1),
+                "feature": "social_media_hours",
+                "current_value": payload["social_media_hours"],
+                "suggested_value": round(max(1.0, payload["social_media_hours"] - 1.0), 1),
                 "expected_effect": "Lower predicted burnout",
+            })
+        if payload["screen_time_hours"] > 5:
+            suggestions.append({
+                "feature": "screen_time_hours",
+                "current_value": payload["screen_time_hours"],
+                "suggested_value": round(max(4.0, payload["screen_time_hours"] - 1.0), 1),
+                "expected_effect": "Reduce overload and burnout",
             })
 
     elif target == "productivity_score":
-        if payload["Sleep_Hours"] < 8:
+        if payload["study_hours"] < 6:
             suggestions.append({
-                "feature": "Sleep_Hours",
-                "current_value": payload["Sleep_Hours"],
-                "suggested_value": min(8.0, payload["Sleep_Hours"] + 1.0),
+                "feature": "study_hours",
+                "current_value": payload["study_hours"],
+                "suggested_value": round(min(6.0, payload["study_hours"] + 1.0), 1),
                 "expected_effect": "Increase predicted productivity",
             })
-        if payload["Smartphone_Usage_Hours"] > 4:
+        if payload["focus_index"] < 80:
             suggestions.append({
-                "feature": "Smartphone_Usage_Hours",
-                "current_value": payload["Smartphone_Usage_Hours"],
-                "suggested_value": round(max(2.5, payload["Smartphone_Usage_Hours"] - 1.5), 1),
-                "expected_effect": "Improve focus and productivity",
+                "feature": "focus_index",
+                "current_value": payload["focus_index"],
+                "suggested_value": min(80.0, payload["focus_index"] + 8.0),
+                "expected_effect": "Increase predicted productivity",
             })
-        if payload["Focus_Score"] < 75:
+        if payload["sleep_hours"] < 8:
             suggestions.append({
-                "feature": "Focus_Score",
-                "current_value": payload["Focus_Score"],
-                "suggested_value": min(80.0, payload["Focus_Score"] + 8.0),
+                "feature": "sleep_hours",
+                "current_value": payload["sleep_hours"],
+                "suggested_value": min(8.0, payload["sleep_hours"] + 1.0),
                 "expected_effect": "Increase predicted productivity",
             })
 
     elif target == "exam_score":
-        if payload["Study_Hours_Per_Day"] < 6:
+        if payload["study_hours"] < 6:
             suggestions.append({
-                "feature": "Study_Hours_Per_Day",
-                "current_value": payload["Study_Hours_Per_Day"],
-                "suggested_value": round(min(6.0, payload["Study_Hours_Per_Day"] + 1.0), 1),
+                "feature": "study_hours",
+                "current_value": payload["study_hours"],
+                "suggested_value": round(min(6.0, payload["study_hours"] + 1.0), 1),
                 "expected_effect": "Increase predicted exam score",
             })
-        if payload["Assignment_Completion_Rate"] < 95:
+        if payload["self_study_hours"] < 3:
             suggestions.append({
-                "feature": "Assignment_Completion_Rate",
-                "current_value": payload["Assignment_Completion_Rate"],
-                "suggested_value": min(95.0, payload["Assignment_Completion_Rate"] + 5.0),
+                "feature": "self_study_hours",
+                "current_value": payload["self_study_hours"],
+                "suggested_value": round(min(3.0, payload["self_study_hours"] + 0.5), 1),
                 "expected_effect": "Increase predicted exam score",
             })
-        if payload["Sleep_Hours"] < 8:
+        if payload["focus_index"] < 80:
             suggestions.append({
-                "feature": "Sleep_Hours",
-                "current_value": payload["Sleep_Hours"],
-                "suggested_value": min(8.0, payload["Sleep_Hours"] + 1.0),
+                "feature": "focus_index",
+                "current_value": payload["focus_index"],
+                "suggested_value": min(80.0, payload["focus_index"] + 8.0),
                 "expected_effect": "Support better exam performance",
             })
 
@@ -245,7 +285,6 @@ def generate_counterfactual_placeholder(target: str, payload: Dict) -> List[dict
         raise ValueError(f"Unsupported target: {target}")
 
     return suggestions[:3]
-
 
 def summarize_cluster_placeholder(df: pd.DataFrame, cluster_id: int) -> Dict:
     cluster_df = df[df["cluster"] == cluster_id].copy()

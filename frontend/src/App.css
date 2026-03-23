@@ -132,12 +132,13 @@ textarea:focus {
 
 /* Header */
 .header {
-  flex: 0 0 62px;
+  flex: 0 0 50px;
   display: flex;
   justify-content: space-between;
   align-items: center;
   width: 100%;
-  padding: 10px 16px;
+  padding-left: 10px;
+  padding-right: 10px;
   background: #d9d9d9;
   border-bottom: 2px solid #1f3b4d;
 }

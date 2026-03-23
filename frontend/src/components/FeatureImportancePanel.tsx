@@ -1,5 +1,7 @@
 import PlotModule from "react-plotly.js";
 const Plot = (PlotModule as any).default ?? PlotModule;
+
+import type { FeatureImportanceItem } from "../api/types";
 import type { StudentPoint } from "../Dashboard";
 
 type SelectionState =
@@ -9,164 +11,215 @@ type SelectionState =
 
 type Props = {
   selection: SelectionState;
+  items?: FeatureImportanceItem[];
+  localItems?: Record<string, number> | null;
 };
 
-export default function FeatureImportancePanel({ selection }: Props) {
-  const featureNames =
+export default function FeatureImportancePanel({
+  selection,
+  items = [],
+  localItems = null,
+}: Props) {
+  const fallbackNames =
     selection.type === "point"
       ? [
-          "Sleep",
-          "Study hours",
-          "Phone usage",
-          "Stress",
-          "Productivity",
-          "Social media",
-          "Gaming hours",
-          "Exercise",
-          "Focus",
-          "Attendance",
-          "Consistency",
-          "Notifications",
-          "YouTube",
-          "Age",
+          "sleep_hours",
+          "study_hours",
+          "screen_time_hours",
+          "social_media_hours",
+          "gaming_hours",
+          "mental_health_score",
+          "focus_index",
         ]
       : [
-          "Sleep",
-          "Study hours",
-          "Phone usage",
-          "Stress",
-          "Productivity",
-          "Social media",
-          "Gaming hours",
-          "Exercise",
-          "Focus",
-          "Attendance",
-          "Consistency",
-          "Notifications",
-          "YouTube",
-          "Age",
-          "Gender",
-          "Preferred study time",
+          "sleep_hours",
+          "study_hours",
+          "screen_time_hours",
+          "social_media_hours",
+          "gaming_hours",
+          "mental_health_score",
+          "focus_index",
+          "exercise_minutes",
         ];
 
-  const featureValues =
+  const fallbackValues =
     selection.type === "point"
-      ? [0.19, 0.17, 0.15, 0.12, 0.1, 0.08, 0.07, 0.055, 0.05, 0.04, 0.03, 0.025, 0.02, 0.015]
-      : selection.type === "cluster"
-        ? [0.18, 0.16, 0.14, 0.13, 0.11, 0.09, 0.08, 0.06, 0.05, 0.045, 0.035, 0.03, 0.025, 0.02, 0.015, 0.01]
-        : [0.2, 0.18, 0.16, 0.14, 0.11, 0.09, 0.075, 0.06, 0.055, 0.045, 0.04, 0.03, 0.025, 0.02, 0.015, 0.01];
+      ? [0.19, 0.17, 0.15, 0.12, 0.1, 0.08, 0.07]
+      : [0.2, 0.18, 0.16, 0.14, 0.11, 0.09, 0.075, 0.06];
 
-  const chartHeight = Math.max(200, featureNames.length * 12);
-  const maxValue = Math.max(...featureValues) * 1.1;
+  const globalMap =
+    items.length > 0
+      ? Object.fromEntries(items.map((d) => [d.feature, d.importance]))
+      : Object.fromEntries(
+          fallbackNames.map((name, i) => [name, fallbackValues[i] ?? 0])
+        );
 
-  const rowHeight = chartHeight / featureNames.length;
-  const fontSize = Math.max(8, Math.min(6, rowHeight * 0.6));
+  const hasLocal =
+    selection.type !== "none" &&
+    localItems != null &&
+    Object.keys(localItems).length > 0;
+
+  const localMap = hasLocal
+    ? Object.fromEntries(
+        Object.entries(localItems!).map(([key, value]) => [key, Math.abs(value)])
+      )
+    : {};
+
+  const featureNames = hasLocal
+    ? Array.from(new Set([...Object.keys(globalMap), ...Object.keys(localMap)]))
+    : Object.keys(globalMap);
+
+  const sortedFeatureNames = [...featureNames].sort((a, b) => {
+    if (hasLocal) {
+      return (localMap[b] ?? 0) - (localMap[a] ?? 0);
+    }
+    return (globalMap[b] ?? 0) - (globalMap[a] ?? 0);
+  });
+
+  const globalValues = sortedFeatureNames.map((name) => globalMap[name] ?? 0);
+  const localValues = sortedFeatureNames.map((name) => localMap[name] ?? 0);
+
+  const ROW_HEIGHT = hasLocal ? 26 : 20;
+  const chartHeight = Math.max(220, sortedFeatureNames.length * ROW_HEIGHT);
+  const maxValue = Math.max(
+    0.01,
+    ...globalValues,
+    ...(hasLocal ? localValues : [0])
+  ) * 1.1;
+
+  const rowHeight = chartHeight / Math.max(sortedFeatureNames.length, 1);
+  const fontSize = Math.max(8, Math.min(10, rowHeight * 0.5));
+
+  const traces = hasLocal
+    ? [
+        {
+          type: "bar" as const,
+          orientation: "h" as const,
+          x: globalValues,
+          y: sortedFeatureNames,
+          name: "Global",
+          hovertemplate: "Global<br>%{y}: %{x:.3f}<extra></extra>",
+          marker: { line: { width: 0 } },
+          width: 0.35,
+        },
+        {
+          type: "bar" as const,
+          orientation: "h" as const,
+          x: localValues,
+          y: sortedFeatureNames,
+          name: "Local",
+          hovertemplate: "Local<br>%{y}: %{x:.3f}<extra></extra>",
+          marker: { line: { width: 0 } },
+          width: 0.35,
+        },
+      ]
+    : [
+        {
+          type: "bar" as const,
+          orientation: "h" as const,
+          x: globalValues,
+          y: sortedFeatureNames,
+          name: "Global",
+          hovertemplate: "Global<br>%{y}: %{x:.3f}<extra></extra>",
+          marker: { line: { width: 0 } },
+        },
+      ];
 
   return (
     <div className="feature-panel-content">
-  <div className="feature-block">
-    <div className="feature-plot-shell">
-      <div className="feature-chart-scroll">
-        <div className="feature-chart-inner" style={{ height: chartHeight }}>
-          <Plot
-            data={[
-              {
-                type: "bar",
-                orientation: "h",
-                x: featureValues,
-                y: featureNames,
-                hovertemplate: "%{y}: %{x:.3f}<extra></extra>",
-                marker: {
+      <div className="feature-block">
+        <div className="feature-plot-shell">
+          <div className="feature-chart-scroll">
+            <div className="feature-chart-inner" style={{ height: chartHeight }}>
+              <Plot
+                data={traces}
+                layout={{
+                  autosize: true,
+                  height: chartHeight,
+                  margin: { l: 40, r: 20, t: hasLocal ? 10 : 0, b: 0 },
+                  barmode: hasLocal ? "group" : "relative",
+                  xaxis: {
+                    range: [0, maxValue],
+                    showticklabels: false,
+                    ticks: "",
+                    showgrid: true,
+                    zeroline: false,
+                  },
+                  yaxis: {
+                    automargin: true,
+                    autorange: "reversed",
+                    tickfont: {
+                      size: fontSize,
+                    },
+                  },
+                  paper_bgcolor: "#efefef",
+                  plot_bgcolor: "#efefef",
+                  showlegend: hasLocal,
+                  legend: hasLocal
+                    ? {
+                        orientation: "h",
+                        x: 0,
+                        y: 1.08,
+                        font: { size: 10 },
+                      }
+                    : undefined,
+                  bargap: hasLocal ? 0.2 : 0.05,
+                  bargroupgap: hasLocal ? 0.08 : 0,
+                }}
+                config={{
+                  responsive: true,
+                  displayModeBar: false,
+                }}
+                style={{ width: "100%", height: "100%" }}
+                useResizeHandler
+              />
+            </div>
+          </div>
+
+          <div className="feature-axis-fixed">
+            <Plot
+              data={[
+                {
+                  type: "scatter",
+                  x: [0, maxValue],
+                  y: [0, 0],
+                  mode: "lines",
                   line: { width: 0 },
+                  hoverinfo: "skip",
+                  showlegend: false,
                 },
-              },
-            ]}
-            layout={{
-              autosize: true,
-              height: chartHeight,
-              margin: { l: 40, r: 20, t: 0, b: 0 },
-              xaxis: {
-                range: [0, maxValue],
-                showticklabels: false,
-                ticks: "",
-                showgrid: true,
-                zeroline: false,
-              },
-              yaxis: {
-                automargin: true,
-                autorange: "reversed",
-                tickfont: {
-                  size: fontSize,
+              ]}
+              layout={{
+                autosize: true,
+                height: 15,
+                margin: { l: 60, r: 20, t: 0, b: 24 },
+                xaxis: {
+                  range: [0, maxValue],
+                  showgrid: false,
+                  zeroline: false,
+                  tickformat: ".2f",
+                  fixedrange: true,
+                  tickfont: { size: fontSize },
                 },
-              },
-              paper_bgcolor: "#efefef",
-              plot_bgcolor: "#efefef",
-              showlegend: false,
-              bargap: 0.05,
-            }}
-            config={{
-              responsive: true,
-              displayModeBar: false,
-            }}
-            style={{ width: "100%", height: "100%" }}
-            useResizeHandler
-          />
+                yaxis: {
+                  visible: false,
+                  fixedrange: true,
+                },
+                paper_bgcolor: "#efefef",
+                plot_bgcolor: "#efefef",
+                showlegend: false,
+              }}
+              config={{
+                responsive: true,
+                displayModeBar: false,
+                staticPlot: true,
+              }}
+              style={{ width: "100%", height: "100%" }}
+              useResizeHandler
+            />
+          </div>
         </div>
       </div>
-
-      <div className="feature-axis-fixed">
-        <Plot
-          data={[
-            {
-              type: "scatter",
-              x: [0, maxValue],
-              y: [0, 0],
-              mode: "lines",
-              line: { width: 0 },
-              hoverinfo: "skip",
-              showlegend: false,
-            },
-          ]}
-          layout={{
-            autosize: true,
-            height: 15,
-            margin: { l: 60, r: 20, t: 0, b: 24 },
-            xaxis: {
-              range: [0, maxValue],
-              showgrid: false,
-              zeroline: false,
-              tickformat: ".2f",
-              fixedrange: true,
-              tickfont: fontSize,
-            },
-            yaxis: {
-              visible: false,
-              fixedrange: true,
-            },
-            paper_bgcolor: "#efefef",
-            plot_bgcolor: "#efefef",
-            showlegend: false,
-          }}
-          config={{
-            responsive: true,
-            displayModeBar: false,
-            staticPlot: true,
-          }}
-          style={{ width: "100%", height: "100%" }}
-          useResizeHandler
-        />
-      </div>
     </div>
-
-    <div className="feature-footer">
-      <div className="toggle-row">
-        <div className="toggle-pill">
-          <div className="toggle-knob" />
-        </div>
-        <span>Global</span>
-      </div>
-    </div>
-  </div>
-</div>
   );
 }
