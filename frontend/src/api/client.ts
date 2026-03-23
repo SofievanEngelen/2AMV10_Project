@@ -13,15 +13,13 @@ export type PredictionResponse = {
 
 const API_URL = import.meta.env.VITE_API_URL;
 
-export async function getPrediction(
-  payload: PredictionRequest
-): Promise<PredictionResponse> {
-  const response = await fetch(`${API_URL}/predict`, {
+export async function predictStudent(input: unknown) {
+  const response = await fetch("http://127.0.0.1:8000/predict", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
     },
-    body: JSON.stringify(payload),
+    body: JSON.stringify(input),
   });
 
   if (!response.ok) {
