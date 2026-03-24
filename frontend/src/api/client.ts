@@ -52,11 +52,25 @@ export function fetchLocalExplanation(payload: PredictRequest) {
   });
 }
 
-export function fetchCounterfactuals(payload: PredictRequest) {
-  return apiFetch<CounterfactualResponse>("/model/counterfactual", {
+export async function fetchCounterfactuals(payload: {
+  target: string;
+  target_level?: string;
+  inputs: Record<string, unknown>;
+}) {
+  const response = await fetch("http://127.0.0.1:8000/model/counterfactual", {
     method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
     body: JSON.stringify(payload),
   });
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`Counterfactual request failed: ${response.status} ${text}`);
+  }
+
+  return response.json();
 }
 
 export function fetchClusterSummary(clusterId: number) {

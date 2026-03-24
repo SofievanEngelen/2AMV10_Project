@@ -15,7 +15,6 @@ import {
 import type {
   BackendPredictionInput,
   ClusterSummaryResponse,
-  CounterfactualResponse,
   FeatureImportanceItem,
   LocalExplanationResponse,
   PredictionResponse,
@@ -28,12 +27,12 @@ export type StudentPoint = {
   y: number;
   cluster?: number;
 
-  // targets
   burnout_level: number;
   productivity_score: number;
   exam_score: number;
+  mental_health_score: number;
+  focus_index: number;
 
-  // features
   age: number;
   gender: string;
   academic_level: string;
@@ -49,8 +48,6 @@ export type StudentPoint = {
   part_time_job: number;
   upcoming_deadline: number;
   internet_quality: string;
-  mental_health_score: number;
-  focus_index: number;
 };
 
 type SelectionState =
@@ -64,6 +61,19 @@ type LegacyPrediction = {
   currentLevel: string;
   targetLevel: string;
   advice: string[];
+};
+
+export type CounterfactualChange = {
+  feature: string;
+  current_value: number | string;
+  suggested_value: number | string;
+};
+
+export type CounterfactualOption = {
+  option: number;
+  changes: CounterfactualChange[];
+  effort: string;
+  new_level: string;
 };
 
 const defaultInputs: BackendPredictionInput = {
@@ -82,8 +92,6 @@ const defaultInputs: BackendPredictionInput = {
   part_time_job: 0,
   upcoming_deadline: 1,
   internet_quality: "Good",
-  mental_health_score: 7,
-  focus_index: 70,
 };
 
 export default function Dashboard() {
@@ -103,13 +111,15 @@ export default function Dashboard() {
     useState<PredictionResponse | null>(null);
   const [localExplanation, setLocalExplanation] =
     useState<LocalExplanationResponse | null>(null);
-  const [counterfactuals, setCounterfactuals] =
-    useState<CounterfactualResponse | null>(null);
+  const [counterfactualOptions, setCounterfactualOptions] = useState<
+    CounterfactualOption[]
+  >([]);
   const [featureImportance, setFeatureImportance] = useState<FeatureImportanceItem[]>([]);
   const [clusterSummary, setClusterSummary] = useState<ClusterSummaryResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const [backendData, setBackendData] = useState<StudentPoint[]>([]);
+  const [latestInputs, setLatestInputs] = useState<BackendPredictionInput>(defaultInputs);
 
   useEffect(() => {
     async function loadUmap() {
@@ -169,6 +179,79 @@ export default function Dashboard() {
   }, [target]);
 
   useEffect(() => {
+    async function loadSelectionExplanation() {
+      if (selection.type === "none") {
+        setLocalExplanation(null);
+        return;
+      }
+
+      try {
+        setError(null);
+
+        const backendTarget = mapUiTargetToBackendTarget(target);
+
+        const avg = (key: keyof StudentPoint) =>
+          selection.points.reduce((sum, p) => sum + Number(p[key] ?? 0), 0) /
+          selection.points.length;
+
+        const inputs: BackendPredictionInput =
+          selection.type === "point"
+            ? {
+                age: selection.point.age,
+                gender: selection.point.gender,
+                academic_level: selection.point.academic_level,
+                study_hours: selection.point.study_hours,
+                self_study_hours: selection.point.self_study_hours,
+                online_classes_hours: selection.point.online_classes_hours,
+                social_media_hours: selection.point.social_media_hours,
+                gaming_hours: selection.point.gaming_hours,
+                sleep_hours: selection.point.sleep_hours,
+                screen_time_hours: selection.point.screen_time_hours,
+                exercise_minutes: selection.point.exercise_minutes,
+                caffeine_intake_mg: selection.point.caffeine_intake_mg,
+                part_time_job: selection.point.part_time_job,
+                upcoming_deadline: selection.point.upcoming_deadline,
+                internet_quality: selection.point.internet_quality,
+                mental_health_score: selection.point.mental_health_score,
+                focus_index: selection.point.focus_index,
+              }
+            : {
+                age: Math.round(avg("age")),
+                gender: selection.points[0].gender,
+                academic_level: selection.points[0].academic_level,
+                study_hours: avg("study_hours"),
+                self_study_hours: avg("self_study_hours"),
+                online_classes_hours: avg("online_classes_hours"),
+                social_media_hours: avg("social_media_hours"),
+                gaming_hours: avg("gaming_hours"),
+                sleep_hours: avg("sleep_hours"),
+                screen_time_hours: avg("screen_time_hours"),
+                exercise_minutes: Math.round(avg("exercise_minutes")),
+                caffeine_intake_mg: Math.round(avg("caffeine_intake_mg")),
+                part_time_job: Math.round(avg("part_time_job")),
+                upcoming_deadline: Math.round(avg("upcoming_deadline")),
+                internet_quality: selection.points[0].internet_quality,
+                mental_health_score: avg("mental_health_score"),
+                focus_index: avg("focus_index"),
+              };
+
+        const explanation = await fetchLocalExplanation({
+          target: backendTarget,
+          inputs,
+        });
+
+        setLocalExplanation(explanation);
+      } catch (err) {
+        setError(
+          err instanceof Error ? err.message : "Failed to load local explanation"
+        );
+      }
+    }
+
+    loadSelectionExplanation();
+  }, [selection, target]);
+
+  useEffect(() => {
     async function loadClusterData() {
       if (selection.type !== "cluster" || selection.points.length === 0) {
         setClusterSummary(null);
@@ -193,8 +276,19 @@ export default function Dashboard() {
   }, [selection]);
 
   useEffect(() => {
-    const backendTarget = mapUiTargetToBackendTarget(target);
-    setColourBy(backendTarget);
+    setBackendPrediction(null);
+    setLocalExplanation(null);
+    setCounterfactualOptions([]);
+    setClusterSummary(null);
+    setError(null);
+
+    setPrediction({
+      stressLevel: "-",
+      confidence: "-",
+      currentLevel: "-",
+      targetLevel: "LOW",
+      advice: [],
+    });
   }, [target]);
 
   const handlePredict = async (values: Record<string, string>) => {
@@ -202,17 +296,48 @@ export default function Dashboard() {
       setError(null);
 
       const inputs: BackendPredictionInput = {
-  ...defaultInputs,
-  gender: values["Gender"] || defaultInputs.gender,
-  study_hours: parseRange(values["Study hours"], defaultInputs.study_hours),
+  age: parseInt(values.age ?? `${defaultInputs.age}`, 10),
+  gender: values.gender || defaultInputs.gender,
+  academic_level: values.academic_level || defaultInputs.academic_level,
+  study_hours: parseNumber(values.study_hours, defaultInputs.study_hours),
+  self_study_hours: parseNumber(
+    values.self_study_hours,
+    defaultInputs.self_study_hours
+  ),
+  online_classes_hours: parseNumber(
+    values.online_classes_hours,
+    defaultInputs.online_classes_hours
+  ),
   social_media_hours: parseNumber(
-    values["Social media hrs"],
+    values.social_media_hours,
     defaultInputs.social_media_hours
   ),
-  gaming_hours: parseNumber(values["Gaming hours"], defaultInputs.gaming_hours),
-  sleep_hours: parseRange(values["Sleep"], defaultInputs.sleep_hours),
-  screen_time_hours: parseRange(values["Phone usage"], defaultInputs.screen_time_hours),
+  gaming_hours: parseNumber(values.gaming_hours, defaultInputs.gaming_hours),
+  sleep_hours: parseNumber(values.sleep_hours, defaultInputs.sleep_hours),
+  screen_time_hours: parseNumber(
+    values.screen_time_hours,
+    defaultInputs.screen_time_hours
+  ),
+  exercise_minutes: parseInt(
+    values.exercise_minutes ?? `${defaultInputs.exercise_minutes}`,
+    10
+  ),
+  caffeine_intake_mg: parseInt(
+    values.caffeine_intake_mg ?? `${defaultInputs.caffeine_intake_mg}`,
+    10
+  ),
+  part_time_job: parseInt(
+    values.part_time_job ?? `${defaultInputs.part_time_job}`,
+    10
+  ),
+  upcoming_deadline: parseInt(
+    values.upcoming_deadline ?? `${defaultInputs.upcoming_deadline}`,
+    10
+  ),
+  internet_quality: values.internet_quality || defaultInputs.internet_quality,
 };
+
+      setLatestInputs(inputs);
 
       const backendTarget = mapUiTargetToBackendTarget(target);
       const payload = {
@@ -228,16 +353,19 @@ export default function Dashboard() {
 
       setBackendPrediction(pred);
       setLocalExplanation(explanation);
-      setCounterfactuals(cf);
+      setCounterfactualOptions(normalizeCounterfactualResponse(cf));
+
+      const currentLevel = formatPredictionLabel(target, pred.predicted_value);
+      const goalLevel = getTargetGoalLabel(target, pred.predicted_value);
 
       setPrediction({
-        stressLevel: formatPredictionLabel(target, pred.predicted_value),
+        stressLevel: currentLevel,
         confidence: `${Math.round(pred.confidence * 100)}%`,
-        currentLevel: formatPredictionLabel(target, pred.predicted_value),
-        targetLevel: getTargetGoalLabel(target, pred.predicted_value),
+        currentLevel,
+        targetLevel: goalLevel,
         advice:
-          cf.suggestions.length > 0
-            ? cf.suggestions.map(
+          normalizeCounterfactualResponse(cf)[0]?.changes?.length > 0
+            ? normalizeCounterfactualResponse(cf)[0].changes.map(
                 (item) =>
                   `${prettyFeatureName(item.feature)}: ${item.current_value} → ${item.suggested_value}`
               )
@@ -245,6 +373,92 @@ export default function Dashboard() {
       });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Prediction failed");
+    }
+  };
+
+  const handleTargetLevelChange = async (nextTargetLevel: string) => {
+    try {
+      setPrediction((prev) => ({
+        ...prev,
+        targetLevel: nextTargetLevel,
+      }));
+
+      setCounterfactualOptions(normalizeCounterfactualResponse([]));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to update counterfactuals");
+    }
+  };
+
+  const handleSuggestChanges = async () => {
+    try {
+      setError(null);
+
+      const backendTarget = mapUiTargetToBackendTarget(target);
+
+      const cf = await fetchCounterfactuals({
+        target: backendTarget,
+        target_level: prediction.targetLevel,
+        inputs: latestInputs,
+      });
+
+      setCounterfactualOptions(normalizeCounterfactualResponse(cf));
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Failed to fetch counterfactual suggestions"
+      );
+    }
+  };
+
+  const handleApplyCounterfactual = async (option: CounterfactualOption) => {
+    try {
+      const updatedInputs: BackendPredictionInput = {
+        ...latestInputs,
+      };
+
+      option.changes.forEach((change) => {
+        const key = change.feature as keyof BackendPredictionInput;
+        const raw = change.suggested_value;
+
+        if (key in updatedInputs) {
+          (updatedInputs as Record<string, string | number>)[key] =
+            typeof raw === "string" && !Number.isNaN(Number(raw)) ? Number(raw) : raw;
+        }
+      });
+
+      setLatestInputs(updatedInputs);
+
+      const backendTarget = mapUiTargetToBackendTarget(target);
+      const payload = {
+        target: backendTarget,
+        inputs: updatedInputs,
+      };
+
+      const [pred, explanation] = await Promise.all([
+        fetchPrediction(payload),
+        fetchLocalExplanation(payload),
+      ]);
+
+      setBackendPrediction(pred);
+      setLocalExplanation(explanation);
+      setCounterfactualOptions([]);
+
+      const currentLevel = formatPredictionLabel(target, pred.predicted_value);
+
+      setPrediction((prev) => ({
+        ...prev,
+        stressLevel: currentLevel,
+        confidence: `${Math.round(pred.confidence * 100)}%`,
+        currentLevel,
+        advice:
+          option.changes.length > 0
+            ? option.changes.map(
+                (item) =>
+                  `${prettyFeatureName(item.feature)}: ${item.current_value} → ${item.suggested_value}`
+              )
+            : prev.advice,
+      }));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to apply counterfactual");
     }
   };
 
@@ -256,41 +470,105 @@ export default function Dashboard() {
         id: "s1",
         x: 1.2,
         y: 5.1,
-        stress: 0.8,
-        productivity: 0.4,
-        sleep: 6,
+        cluster: 0,
+        burnout_level: 80,
+        productivity_score: 40,
+        exam_score: 52,
+        age: 21,
+        gender: "Female",
+        academic_level: "Undergraduate",
         study_hours: 2,
-        phone_usage: 5,
+        self_study_hours: 1,
+        online_classes_hours: 2,
+        social_media_hours: 4,
+        gaming_hours: 1,
+        sleep_hours: 6,
+        screen_time_hours: 5,
+        exercise_minutes: 20,
+        caffeine_intake_mg: 100,
+        part_time_job: 0,
+        upcoming_deadline: 1,
+        internet_quality: "Good",
+        mental_health_score: 6,
+        focus_index: 58,
       },
       {
         id: "s2",
         x: 1.1,
         y: 5.6,
-        stress: 0.7,
-        productivity: 0.5,
-        sleep: 7,
+        cluster: 0,
+        burnout_level: 72,
+        productivity_score: 48,
+        exam_score: 56,
+        age: 22,
+        gender: "Male",
+        academic_level: "Undergraduate",
         study_hours: 3,
-        phone_usage: 4,
+        self_study_hours: 1.5,
+        online_classes_hours: 2,
+        social_media_hours: 3.5,
+        gaming_hours: 2,
+        sleep_hours: 7,
+        screen_time_hours: 4,
+        exercise_minutes: 30,
+        caffeine_intake_mg: 120,
+        part_time_job: 1,
+        upcoming_deadline: 1,
+        internet_quality: "Good",
+        mental_health_score: 6.5,
+        focus_index: 62,
       },
       {
         id: "s3",
         x: 8.7,
         y: 4.8,
-        stress: 0.2,
-        productivity: 0.9,
-        sleep: 8,
+        cluster: 1,
+        burnout_level: 25,
+        productivity_score: 88,
+        exam_score: 81,
+        age: 20,
+        gender: "Female",
+        academic_level: "Undergraduate",
         study_hours: 4,
-        phone_usage: 2,
+        self_study_hours: 3,
+        online_classes_hours: 2,
+        social_media_hours: 1.5,
+        gaming_hours: 0.5,
+        sleep_hours: 8,
+        screen_time_hours: 2,
+        exercise_minutes: 60,
+        caffeine_intake_mg: 80,
+        part_time_job: 0,
+        upcoming_deadline: 0,
+        internet_quality: "Good",
+        mental_health_score: 8,
+        focus_index: 82,
       },
       {
         id: "s4",
         x: 8.9,
         y: 5.3,
-        stress: 0.3,
-        productivity: 0.8,
-        sleep: 7,
+        cluster: 1,
+        burnout_level: 31,
+        productivity_score: 79,
+        exam_score: 76,
+        age: 23,
+        gender: "Male",
+        academic_level: "Graduate",
         study_hours: 5,
-        phone_usage: 2,
+        self_study_hours: 3,
+        online_classes_hours: 1,
+        social_media_hours: 1,
+        gaming_hours: 0,
+        sleep_hours: 7,
+        screen_time_hours: 2,
+        exercise_minutes: 55,
+        caffeine_intake_mg: 90,
+        part_time_job: 0,
+        upcoming_deadline: 0,
+        internet_quality: "Excellent",
+        mental_health_score: 7.5,
+        focus_index: 78,
       },
     ];
   }, [backendData]);
@@ -313,6 +591,8 @@ export default function Dashboard() {
             <option value="stress">Burnout</option>
             <option value="productivity">Productivity</option>
             <option value="exam">Exam score</option>
+            <option value="mental_health">Mental health score</option>
+            <option value="focus">Focus index</option>
           </select>
         </div>
       </header>
@@ -340,7 +620,10 @@ export default function Dashboard() {
                     : { type: "cluster", points }
                 )
               }
-              onClearSelection={() => setSelection({ type: "none" })}
+              onClearSelection={() => {
+                setSelection({type: "none"});
+                setLocalExplanation(null);
+              }}
             />
           </div>
         </section>
@@ -384,7 +667,12 @@ export default function Dashboard() {
           <div className="column-body">
             <CounterfactualPanel
               prediction={prediction}
+              targetLabel={getUiTargetLabel(target)}
               onPredict={handlePredict}
+              counterfactualOptions={counterfactualOptions}
+              onTargetLevelChange={handleTargetLevelChange}
+              onSuggestChanges={handleSuggestChanges}
+              onApplyCounterfactual={handleApplyCounterfactual}
             />
           </div>
         </section>
@@ -399,6 +687,10 @@ function mapUiTargetToBackendTarget(target: string): Target {
       return "productivity_score";
     case "exam":
       return "exam_score";
+    case "mental_health":
+      return "mental_health_score";
+    case "focus":
+      return "focus_index";
     case "stress":
     default:
       return "burnout_level";
@@ -418,14 +710,27 @@ function parseNumber(value: string | undefined, fallback: number) {
 }
 
 function formatPredictionLabel(target: string, value: number) {
-  if (target === "productivity") return value.toFixed(2);
+  if (
+    target === "productivity" ||
+    target === "exam" ||
+    target === "mental_health" ||
+    target === "focus"
+  ) {
+    return value.toFixed(2);
+  }
+
   if (value < 33) return "LOW";
   if (value < 66) return "MEDIUM";
   return "HIGH";
 }
 
 function getTargetGoalLabel(target: string, value: number) {
-  if (target === "productivity") {
+  if (
+    target === "productivity" ||
+    target === "exam" ||
+    target === "mental_health" ||
+    target === "focus"
+  ) {
     if (value >= 75) return "HIGH";
     if (value >= 45) return "MEDIUM";
     return "LOW";
@@ -438,4 +743,46 @@ function getTargetGoalLabel(target: string, value: number) {
 
 function prettyFeatureName(name: string) {
   return name.replaceAll("_", " ");
+}
+
+function getUiTargetLabel(target: string) {
+  switch (target) {
+    case "stress":
+      return "Burnout";
+    case "productivity":
+      return "Productivity";
+    case "exam":
+      return "Exam score";
+    case "mental_health":
+      return "Mental health score";
+    case "focus":
+      return "Focus index";
+    default:
+      return "Prediction";
+  }
+}
+
+function normalizeCounterfactualResponse(raw: any): CounterfactualOption[] {
+  if (!raw) return [];
+
+  if (Array.isArray(raw)) {
+    return raw as CounterfactualOption[];
+  }
+
+  if (Array.isArray(raw.options)) {
+    return raw.options as CounterfactualOption[];
+  }
+
+  if (Array.isArray(raw.suggestions)) {
+    return [
+      {
+        option: 1,
+        changes: raw.suggestions,
+        effort: "Low",
+        new_level: "Improved",
+      },
+    ];
+  }
+
+  return [];
 }

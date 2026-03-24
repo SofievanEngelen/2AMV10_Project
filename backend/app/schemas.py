@@ -1,7 +1,6 @@
 from typing import Any, Dict, List, Literal
 from pydantic import BaseModel
 
-
 class PredictionInput(BaseModel):
     age: int = 21
     gender: str = "Female"
@@ -21,36 +20,42 @@ class PredictionInput(BaseModel):
     mental_health_score: float = 7.0
     focus_index: float = 70.0
 
+
 class PredictRequest(BaseModel):
-    target: Literal["burnout_level", "productivity_score", "exam_score"]
+    target: Literal["burnout_level", "productivity_score", "exam_score", "mental_health_score", "focus_index"]
     inputs: PredictionInput
 
 
+class CounterfactualRequest(BaseModel):
+    target: Literal["burnout_level", "productivity_score", "exam_score", "mental_health_score", "focus_index"]
+    inputs: PredictionInput
+    target_level: str | None = None
+
+
 class PredictionResponse(BaseModel):
-    target: Literal["burnout_level", "productivity_score", "exam_score"]
+    target: Literal["burnout_level", "productivity_score", "exam_score", "mental_health_score", "focus_index"]
     predicted_value: float
     confidence: float
     used_placeholder_model: bool = True
 
 
 class LocalExplanationResponse(BaseModel):
-    target: Literal["burnout_level", "productivity_score", "exam_score"]
+    target: Literal["burnout_level", "productivity_score", "exam_score", "mental_health_score", "focus_index"]
     contributions: Dict[str, float]
     used_placeholder_model: bool = True
 
 
-class CounterfactualSuggestion(BaseModel):
+class CounterfactualChange(BaseModel):
     feature: str
     current_value: Any
     suggested_value: Any
-    expected_effect: str
 
 
-class CounterfactualResponse(BaseModel):
-    target: Literal["burnout_level", "productivity_score", "exam_score"]
-    original_prediction: PredictionResponse
-    suggestions: List[CounterfactualSuggestion]
-    used_placeholder_model: bool = True
+class CounterfactualOption(BaseModel):
+    option: int
+    changes: List[CounterfactualChange]
+    effort: str
+    new_level: str
 
 
 class FeatureImportanceItem(BaseModel):
@@ -103,5 +108,7 @@ class ClusterSummaryResponse(BaseModel):
     avg_productivity: float
     avg_burnout: float
     avg_exam_score: float
+    avg_mental_health_score: float
+    avg_focus_index: float
     top_features: List[str]
     used_placeholder_model: bool = True

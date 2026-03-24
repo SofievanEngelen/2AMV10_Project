@@ -181,23 +181,24 @@ export default function UmapPanel({
       </div>
 
       <div className="umap-controls">
-        <label htmlFor="colour-by-select" className="umap-control-label">
-          Colour by
-        </label>
-        <select
-          id="colour-by-select"
-          className="umap-select"
-          value={colourBy}
-          onChange={(e) => onColourByChange(e.target.value)}
-        >
-          {colourOptions.map((option) => (
+        <label className="umap-controls-label">Colour by:</label>
+
+        <div className="umap-select-wrap">
+          <select
+            className="umap-select"
+            value={colourBy}
+            onChange={(e) => onColourByChange(e.target.value)}
+          >
+            {colourOptions.map((option) => (
             <option key={option.value} value={option.value}>
               {option.label}
             </option>
           ))}
-        </select>
+          </select>
+          <span className="umap-select-arrow">▼</span>
+        </div>
 
-        <button className="clear-selection-btn" onClick={onClearSelection}>
+        <button className="umap-clear-btn" onClick={onClearSelection}>
           Clear selection
         </button>
       </div>
