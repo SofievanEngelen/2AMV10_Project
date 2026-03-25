@@ -28,8 +28,6 @@ const featureConfig = [
   { key: "part_time_job", label: "Part-time job" },
   { key: "upcoming_deadline", label: "Upcoming deadline" },
   { key: "internet_quality", label: "Internet quality", categorical: true },
-  { key: "mental_health_score", label: "Mental health" },
-  { key: "focus_index", label: "Focus index" },
 ] as const;
 
 function average(points: StudentPoint[], key: keyof StudentPoint) {
@@ -39,28 +37,6 @@ function average(points: StudentPoint[], key: keyof StudentPoint) {
 
   if (values.length === 0) return 0;
   return values.reduce((sum, v) => sum + v, 0) / values.length;
-}
-
-function mode(points: StudentPoint[], key: keyof StudentPoint) {
-  const counts = new Map<string, number>();
-
-  for (const point of points) {
-    const value = point[key];
-    if (typeof value !== "string") continue;
-    counts.set(value, (counts.get(value) ?? 0) + 1);
-  }
-
-  let best = "—";
-  let bestCount = -1;
-
-  for (const [value, count] of counts.entries()) {
-    if (count > bestCount) {
-      best = value;
-      bestCount = count;
-    }
-  }
-
-  return best;
 }
 
 function formatValue(value: unknown, unit?: string) {
@@ -103,6 +79,14 @@ export default function ClusterPanel({
             label: "Exam score",
             value: selection.point.exam_score.toFixed(2),
           },
+          {
+            label: "Mental health",
+            value: selection.point.mental_health_score.toFixed(2),
+          },
+          {
+            label: "Focus index",
+            value: selection.point.focus_index.toFixed(2),
+          },
           ...featureConfig.map(({ key, label, unit }) => {
             const value = selection.point[key as keyof StudentPoint];
             return {
@@ -123,6 +107,14 @@ export default function ClusterPanel({
           {
             label: "Average exam score",
             value: average(profilePoints, "exam_score").toFixed(2),
+          },
+          {
+            label: "Average mental health",
+            value: average(profilePoints, "mental_health_score").toFixed(2),
+          },
+          {
+            label: "Average focus index",
+            value: average(profilePoints, "focus_index").toFixed(2),
           },
           ...featureConfig
               .filter((f) => !f.categorical)
@@ -167,6 +159,20 @@ export default function ClusterPanel({
             value: formatDifference(
               average(profilePoints, "exam_score") -
                 average(restPoints, "exam_score")
+            ),
+          },
+          {
+            label: "Mental health",
+            value: formatDifference(
+              average(profilePoints, "mental_health_score") -
+                average(restPoints, "mental_health_score")
+            ),
+          },
+          {
+            label: "Focus index",
+            value: formatDifference(
+              average(profilePoints, "focus_index") -
+                average(restPoints, "focus_index")
             ),
           },
           ...featureConfig

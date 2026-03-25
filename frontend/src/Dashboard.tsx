@@ -15,7 +15,6 @@ import {
 import type {
   BackendPredictionInput,
   ClusterSummaryResponse,
-  CounterfactualResponse,
   FeatureImportanceItem,
   LocalExplanationResponse,
   PredictionResponse,
@@ -28,12 +27,12 @@ export type StudentPoint = {
   y: number;
   cluster?: number;
 
-  // targets
   burnout_level: number;
   productivity_score: number;
   exam_score: number;
+  mental_health_score: number;
+  focus_index: number;
 
-  // features
   age: number;
   gender: string;
   academic_level: string;
@@ -49,8 +48,6 @@ export type StudentPoint = {
   part_time_job: number;
   upcoming_deadline: number;
   internet_quality: string;
-  mental_health_score: number;
-  focus_index: number;
 };
 
 type SelectionState =
@@ -64,6 +61,40 @@ type LegacyPrediction = {
   currentLevel: string;
   targetLevel: string;
   advice: string[];
+};
+
+const numericWhatIfFields = [
+  "age",
+  "study_hours",
+  "self_study_hours",
+  "online_classes_hours",
+  "social_media_hours",
+  "gaming_hours",
+  "sleep_hours",
+  "screen_time_hours",
+  "exercise_minutes",
+  "caffeine_intake_mg",
+] as const;
+
+const categoricalWhatIfFields = [
+  "gender",
+  "academic_level",
+  "part_time_job",
+  "upcoming_deadline",
+  "internet_quality",
+] as const;
+
+export type CounterfactualChange = {
+  feature: string;
+  current_value: number | string;
+  suggested_value: number | string;
+};
+
+export type CounterfactualOption = {
+  option: number;
+  changes: CounterfactualChange[];
+  effort: string;
+  new_level: string;
 };
 
 const defaultInputs: BackendPredictionInput = {
@@ -82,13 +113,11 @@ const defaultInputs: BackendPredictionInput = {
   part_time_job: 0,
   upcoming_deadline: 1,
   internet_quality: "Good",
-  mental_health_score: 7,
-  focus_index: 70,
 };
 
 export default function Dashboard() {
-  const [target, setTarget] = useState("stress");
-  const [colourBy, setColourBy] = useState("burnout_level");
+  const [target, setTarget] = useState("exam");
+  const [colourBy, setColourBy] = useState("exam_score");
   const [selection, setSelection] = useState<SelectionState>({ type: "none" });
 
   const [prediction, setPrediction] = useState<LegacyPrediction>({
@@ -103,13 +132,22 @@ export default function Dashboard() {
     useState<PredictionResponse | null>(null);
   const [localExplanation, setLocalExplanation] =
     useState<LocalExplanationResponse | null>(null);
-  const [counterfactuals, setCounterfactuals] =
-    useState<CounterfactualResponse | null>(null);
-  const [featureImportance, setFeatureImportance] = useState<FeatureImportanceItem[]>([]);
-  const [clusterSummary, setClusterSummary] = useState<ClusterSummaryResponse | null>(null);
+  const [counterfactualOptions, setCounterfactualOptions] = useState<
+    CounterfactualOption[]
+  >([]);
+  const [featureImportance, setFeatureImportance] = useState<
+    FeatureImportanceItem[]
+  >([]);
+  const [clusterSummary, setClusterSummary] =
+    useState<ClusterSummaryResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const [backendData, setBackendData] = useState<StudentPoint[]>([]);
+  const [latestInputs, setLatestInputs] =
+    useState<BackendPredictionInput>(defaultInputs);
+  const [temporaryWhatIfPoint, setTemporaryWhatIfPoint] =
+    useState<StudentPoint | null>(null);
+  const [whatIfValues, setWhatIfValues] = useState<Record<string, string> | null>(null);
 
   useEffect(() => {
     async function loadUmap() {
@@ -126,6 +164,8 @@ export default function Dashboard() {
             burnout_level: p.burnout_level,
             productivity_score: p.productivity_score,
             exam_score: p.exam_score,
+            mental_health_score: p.mental_health_score,
+            focus_index: p.focus_index,
 
             age: p.age,
             gender: p.gender,
@@ -142,8 +182,6 @@ export default function Dashboard() {
             part_time_job: p.part_time_job,
             upcoming_deadline: p.upcoming_deadline,
             internet_quality: p.internet_quality,
-            mental_health_score: p.mental_health_score,
-            focus_index: p.focus_index,
           }))
         );
       } catch (err) {
@@ -161,12 +199,88 @@ export default function Dashboard() {
         const res = await fetchFeatureImportance(backendTarget);
         setFeatureImportance(res.global_importance);
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to load feature importance");
+        setError(
+          err instanceof Error ? err.message : "Failed to load feature importance"
+        );
       }
     }
 
     loadFeatureImportanceData();
   }, [target]);
+
+  useEffect(() => {
+    async function loadSelectionExplanation() {
+      if (selection.type === "none") {
+        setLocalExplanation(null);
+        return;
+      }
+
+      try {
+        setError(null);
+
+        const backendTarget = mapUiTargetToBackendTarget(target);
+
+        const avg = (points: StudentPoint[], key: keyof StudentPoint) =>
+          points.reduce((sum, p) => sum + Number(p[key] ?? 0), 0) / points.length;
+
+        const inputs: BackendPredictionInput =
+          selection.type === "point"
+            ? {
+                age: selection.point.age,
+                gender: selection.point.gender,
+                academic_level: selection.point.academic_level,
+                study_hours: selection.point.study_hours,
+                self_study_hours: selection.point.self_study_hours,
+                online_classes_hours: selection.point.online_classes_hours,
+                social_media_hours: selection.point.social_media_hours,
+                gaming_hours: selection.point.gaming_hours,
+                sleep_hours: selection.point.sleep_hours,
+                screen_time_hours: selection.point.screen_time_hours,
+                exercise_minutes: selection.point.exercise_minutes,
+                caffeine_intake_mg: selection.point.caffeine_intake_mg,
+                part_time_job: selection.point.part_time_job,
+                upcoming_deadline: selection.point.upcoming_deadline,
+                internet_quality: selection.point.internet_quality,
+              }
+            : {
+                age: Math.round(avg(selection.points, "age")),
+                gender: selection.points[0].gender,
+                academic_level: selection.points[0].academic_level,
+                study_hours: avg(selection.points, "study_hours"),
+                self_study_hours: avg(selection.points, "self_study_hours"),
+                online_classes_hours: avg(selection.points, "online_classes_hours"),
+                social_media_hours: avg(selection.points, "social_media_hours"),
+                gaming_hours: avg(selection.points, "gaming_hours"),
+                sleep_hours: avg(selection.points, "sleep_hours"),
+                screen_time_hours: avg(selection.points, "screen_time_hours"),
+                exercise_minutes: Math.round(
+                  avg(selection.points, "exercise_minutes")
+                ),
+                caffeine_intake_mg: Math.round(
+                  avg(selection.points, "caffeine_intake_mg")
+                ),
+                part_time_job: Math.round(avg(selection.points, "part_time_job")),
+                upcoming_deadline: Math.round(
+                  avg(selection.points, "upcoming_deadline")
+                ),
+                internet_quality: selection.points[0].internet_quality,
+              };
+
+        const explanation = await fetchLocalExplanation({
+          target: backendTarget,
+          inputs,
+        });
+
+        setLocalExplanation(explanation);
+      } catch (err) {
+        setError(
+          err instanceof Error ? err.message : "Failed to load local explanation"
+        );
+      }
+    }
+
+    loadSelectionExplanation();
+  }, [selection, target]);
 
   useEffect(() => {
     async function loadClusterData() {
@@ -185,7 +299,9 @@ export default function Dashboard() {
         const res = await fetchClusterSummary(clusterId);
         setClusterSummary(res);
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to load cluster summary");
+        setError(
+          err instanceof Error ? err.message : "Failed to load cluster summary"
+        );
       }
     }
 
@@ -193,26 +309,308 @@ export default function Dashboard() {
   }, [selection]);
 
   useEffect(() => {
-    const backendTarget = mapUiTargetToBackendTarget(target);
-    setColourBy(backendTarget);
+    setBackendPrediction(null);
+    setLocalExplanation(null);
+    setCounterfactualOptions([]);
+    setClusterSummary(null);
+    setError(null);
+
+    setPrediction({
+      stressLevel: "-",
+      confidence: "-",
+      currentLevel: "-",
+      targetLevel: "LOW",
+      advice: [],
+    });
   }, [target]);
+
+  const selectionFillValues = useMemo(() => {
+    if (selection.type === "none") return null;
+
+    if (selection.type === "point") {
+      const p = selection.point;
+
+      return {
+        age: String(p.age),
+        gender: String(p.gender),
+        academic_level: String(p.academic_level),
+        study_hours: String(p.study_hours),
+        self_study_hours: String(p.self_study_hours),
+        online_classes_hours: String(p.online_classes_hours),
+        social_media_hours: String(p.social_media_hours),
+        gaming_hours: String(p.gaming_hours),
+        sleep_hours: String(p.sleep_hours),
+        screen_time_hours: String(p.screen_time_hours),
+        exercise_minutes: String(p.exercise_minutes),
+        caffeine_intake_mg: String(p.caffeine_intake_mg),
+        part_time_job: String(p.part_time_job),
+        upcoming_deadline: String(p.upcoming_deadline),
+        internet_quality: String(p.internet_quality),
+      };
+    }
+
+    const points = selection.points;
+    if (points.length === 0) return null;
+
+    const result: Record<string, string> = {};
+
+    for (const field of numericWhatIfFields) {
+      result[field] = String(
+        round1(average(points.map((p) => Number(p[field]))))
+      );
+    }
+
+    for (const field of categoricalWhatIfFields) {
+      result[field] = mode(points.map((p) => p[field] as string | number));
+    }
+
+    return result;
+  }, [selection]);
+
+  const whatIfFillValues = whatIfValues ?? selectionFillValues;
+
+  useEffect(() => {
+    setWhatIfValues(null);
+  }, [selection]);
+
+  useEffect(() => {
+    if (!whatIfFillValues) return;
+
+    setLatestInputs({
+      age: parseInt(whatIfFillValues.age ?? `${defaultInputs.age}`, 10),
+      gender: whatIfFillValues.gender || defaultInputs.gender,
+      academic_level:
+        whatIfFillValues.academic_level || defaultInputs.academic_level,
+      study_hours: parseNumber(
+        whatIfFillValues.study_hours,
+        defaultInputs.study_hours
+      ),
+      self_study_hours: parseNumber(
+        whatIfFillValues.self_study_hours,
+        defaultInputs.self_study_hours
+      ),
+      online_classes_hours: parseNumber(
+        whatIfFillValues.online_classes_hours,
+        defaultInputs.online_classes_hours
+      ),
+      social_media_hours: parseNumber(
+        whatIfFillValues.social_media_hours,
+        defaultInputs.social_media_hours
+      ),
+      gaming_hours: parseNumber(
+        whatIfFillValues.gaming_hours,
+        defaultInputs.gaming_hours
+      ),
+      sleep_hours: parseNumber(
+        whatIfFillValues.sleep_hours,
+        defaultInputs.sleep_hours
+      ),
+      screen_time_hours: parseNumber(
+        whatIfFillValues.screen_time_hours,
+        defaultInputs.screen_time_hours
+      ),
+      exercise_minutes: parseInt(
+        whatIfFillValues.exercise_minutes ?? `${defaultInputs.exercise_minutes}`,
+        10
+      ),
+      caffeine_intake_mg: parseInt(
+        whatIfFillValues.caffeine_intake_mg ??
+          `${defaultInputs.caffeine_intake_mg}`,
+        10
+      ),
+      part_time_job: parseInt(
+        whatIfFillValues.part_time_job ?? `${defaultInputs.part_time_job}`,
+        10
+      ),
+      upcoming_deadline: parseInt(
+        whatIfFillValues.upcoming_deadline ??
+          `${defaultInputs.upcoming_deadline}`,
+        10
+      ),
+      internet_quality:
+        whatIfFillValues.internet_quality || defaultInputs.internet_quality,
+    });
+  }, [whatIfFillValues]);
+
+  const data: StudentPoint[] = useMemo(() => {
+    if (backendData.length > 0) return backendData;
+
+    return [
+      {
+        id: "s1",
+        x: 1.2,
+        y: 5.1,
+        cluster: 0,
+        burnout_level: 80,
+        productivity_score: 40,
+        exam_score: 52,
+        mental_health_score: 6,
+        focus_index: 58,
+        age: 21,
+        gender: "Female",
+        academic_level: "Undergraduate",
+        study_hours: 2,
+        self_study_hours: 1,
+        online_classes_hours: 2,
+        social_media_hours: 4,
+        gaming_hours: 1,
+        sleep_hours: 6,
+        screen_time_hours: 5,
+        exercise_minutes: 20,
+        caffeine_intake_mg: 100,
+        part_time_job: 0,
+        upcoming_deadline: 1,
+        internet_quality: "Good",
+      },
+      {
+        id: "s2",
+        x: 1.1,
+        y: 5.6,
+        cluster: 0,
+        burnout_level: 72,
+        productivity_score: 48,
+        exam_score: 56,
+        mental_health_score: 6.5,
+        focus_index: 62,
+        age: 22,
+        gender: "Male",
+        academic_level: "Undergraduate",
+        study_hours: 3,
+        self_study_hours: 1.5,
+        online_classes_hours: 2,
+        social_media_hours: 3.5,
+        gaming_hours: 2,
+        sleep_hours: 7,
+        screen_time_hours: 4,
+        exercise_minutes: 30,
+        caffeine_intake_mg: 120,
+        part_time_job: 1,
+        upcoming_deadline: 1,
+        internet_quality: "Good",
+      },
+      {
+        id: "s3",
+        x: 8.7,
+        y: 4.8,
+        cluster: 1,
+        burnout_level: 25,
+        productivity_score: 88,
+        exam_score: 81,
+        mental_health_score: 8,
+        focus_index: 82,
+        age: 20,
+        gender: "Female",
+        academic_level: "Undergraduate",
+        study_hours: 4,
+        self_study_hours: 3,
+        online_classes_hours: 2,
+        social_media_hours: 1.5,
+        gaming_hours: 0.5,
+        sleep_hours: 8,
+        screen_time_hours: 2,
+        exercise_minutes: 60,
+        caffeine_intake_mg: 80,
+        part_time_job: 0,
+        upcoming_deadline: 0,
+        internet_quality: "Good",
+      },
+      {
+        id: "s4",
+        x: 8.9,
+        y: 5.3,
+        cluster: 1,
+        burnout_level: 31,
+        productivity_score: 79,
+        exam_score: 76,
+        mental_health_score: 7.5,
+        focus_index: 78,
+        age: 23,
+        gender: "Male",
+        academic_level: "Graduate",
+        study_hours: 5,
+        self_study_hours: 3,
+        online_classes_hours: 1,
+        social_media_hours: 1,
+        gaming_hours: 0,
+        sleep_hours: 7,
+        screen_time_hours: 2,
+        exercise_minutes: 55,
+        caffeine_intake_mg: 90,
+        part_time_job: 0,
+        upcoming_deadline: 0,
+        internet_quality: "Excellent",
+      },
+    ];
+  }, [backendData]);
+
+  const derivedCurrentLevel = useMemo(() => {
+    const values = inputsToWhatIfValues(latestInputs);
+
+    const existingPoint = data.find((point) =>
+      pointMatchesWhatIfValues(point, values)
+    );
+
+    if (existingPoint) {
+      return getLevelFromTargetValue(
+        target,
+        getPointTargetValue(existingPoint, target)
+      );
+    }
+
+    if (backendPrediction) {
+      return formatPredictionLabel(backendPrediction, target);
+    }
+
+    return "-";
+  }, [latestInputs, data, target, backendPrediction]);
 
   const handlePredict = async (values: Record<string, string>) => {
     try {
       setError(null);
 
       const inputs: BackendPredictionInput = {
-  ...defaultInputs,
-  gender: values["Gender"] || defaultInputs.gender,
-  study_hours: parseRange(values["Study hours"], defaultInputs.study_hours),
-  social_media_hours: parseNumber(
-    values["Social media hrs"],
-    defaultInputs.social_media_hours
-  ),
-  gaming_hours: parseNumber(values["Gaming hours"], defaultInputs.gaming_hours),
-  sleep_hours: parseRange(values["Sleep"], defaultInputs.sleep_hours),
-  screen_time_hours: parseRange(values["Phone usage"], defaultInputs.screen_time_hours),
-};
+        age: parseInt(values.age ?? `${defaultInputs.age}`, 10),
+        gender: values.gender || defaultInputs.gender,
+        academic_level: values.academic_level || defaultInputs.academic_level,
+        study_hours: parseNumber(values.study_hours, defaultInputs.study_hours),
+        self_study_hours: parseNumber(
+          values.self_study_hours,
+          defaultInputs.self_study_hours
+        ),
+        online_classes_hours: parseNumber(
+          values.online_classes_hours,
+          defaultInputs.online_classes_hours
+        ),
+        social_media_hours: parseNumber(
+          values.social_media_hours,
+          defaultInputs.social_media_hours
+        ),
+        gaming_hours: parseNumber(values.gaming_hours, defaultInputs.gaming_hours),
+        sleep_hours: parseNumber(values.sleep_hours, defaultInputs.sleep_hours),
+        screen_time_hours: parseNumber(
+          values.screen_time_hours,
+          defaultInputs.screen_time_hours
+        ),
+        exercise_minutes: parseInt(
+          values.exercise_minutes ?? `${defaultInputs.exercise_minutes}`,
+          10
+        ),
+        caffeine_intake_mg: parseInt(
+          values.caffeine_intake_mg ?? `${defaultInputs.caffeine_intake_mg}`,
+          10
+        ),
+        part_time_job: parseInt(
+          values.part_time_job ?? `${defaultInputs.part_time_job}`,
+          10
+        ),
+        upcoming_deadline: parseInt(
+          values.upcoming_deadline ?? `${defaultInputs.upcoming_deadline}`,
+          10
+        ),
+        internet_quality: values.internet_quality || defaultInputs.internet_quality,
+      };
+
+      setLatestInputs(inputs);
 
       const backendTarget = mapUiTargetToBackendTarget(target);
       const payload = {
@@ -228,16 +626,28 @@ export default function Dashboard() {
 
       setBackendPrediction(pred);
       setLocalExplanation(explanation);
-      setCounterfactuals(cf);
+      setCounterfactualOptions(normalizeCounterfactualResponse(cf));
+
+      const matchedPoint = data.find((point) =>
+        pointMatchesWhatIfValues(point, values)
+      );
+
+      const currentLevel = matchedPoint
+        ? getLevelFromTargetValue(target, getPointTargetValue(matchedPoint, target))
+        : formatPredictionLabel(pred, target);
+
+      const goalLevel = matchedPoint
+        ? getLevelFromTargetValue(target, getPointTargetValue(matchedPoint, target))
+        : formatPredictionLabel(pred, target);
 
       setPrediction({
-        stressLevel: formatPredictionLabel(target, pred.predicted_value),
+        stressLevel: currentLevel,
         confidence: `${Math.round(pred.confidence * 100)}%`,
-        currentLevel: formatPredictionLabel(target, pred.predicted_value),
-        targetLevel: getTargetGoalLabel(target, pred.predicted_value),
+        currentLevel,
+        targetLevel: goalLevel,
         advice:
-          cf.suggestions.length > 0
-            ? cf.suggestions.map(
+          normalizeCounterfactualResponse(cf)[0]?.changes?.length > 0
+            ? normalizeCounterfactualResponse(cf)[0].changes.map(
                 (item) =>
                   `${prettyFeatureName(item.feature)}: ${item.current_value} → ${item.suggested_value}`
               )
@@ -248,52 +658,104 @@ export default function Dashboard() {
     }
   };
 
-  const data: StudentPoint[] = useMemo(() => {
-    if (backendData.length > 0) return backendData;
+  const handleTargetLevelChange = async (nextTargetLevel: string) => {
+    try {
+      setPrediction((prev) => ({
+        ...prev,
+        targetLevel: nextTargetLevel,
+      }));
 
-    return [
-      {
-        id: "s1",
-        x: 1.2,
-        y: 5.1,
-        stress: 0.8,
-        productivity: 0.4,
-        sleep: 6,
-        study_hours: 2,
-        phone_usage: 5,
-      },
-      {
-        id: "s2",
-        x: 1.1,
-        y: 5.6,
-        stress: 0.7,
-        productivity: 0.5,
-        sleep: 7,
-        study_hours: 3,
-        phone_usage: 4,
-      },
-      {
-        id: "s3",
-        x: 8.7,
-        y: 4.8,
-        stress: 0.2,
-        productivity: 0.9,
-        sleep: 8,
-        study_hours: 4,
-        phone_usage: 2,
-      },
-      {
-        id: "s4",
-        x: 8.9,
-        y: 5.3,
-        stress: 0.3,
-        productivity: 0.8,
-        sleep: 7,
-        study_hours: 5,
-        phone_usage: 2,
-      },
-    ];
-  }, [backendData]);
+      setCounterfactualOptions(normalizeCounterfactualResponse([]));
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Failed to update counterfactuals"
+      );
+    }
+  };
+
+  const handleSuggestChanges = async () => {
+    try {
+      setError(null);
+
+      const backendTarget = mapUiTargetToBackendTarget(target);
+
+      const cf = await fetchCounterfactuals({
+        target: backendTarget,
+        target_level: prediction.targetLevel,
+        inputs: latestInputs,
+      });
+
+      setCounterfactualOptions(normalizeCounterfactualResponse(cf));
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Failed to fetch counterfactual suggestions"
+      );
+    }
+  };
+
+  const handleApplyCounterfactual = (option: CounterfactualOption) => {
+    const baseValues =
+      whatIfFillValues ??
+      inputsToWhatIfValues(latestInputs);
+
+    const updatedValues: Record<string, string> = {
+      ...baseValues,
+    };
+
+    option.changes.forEach((change) => {
+      updatedValues[change.feature] = String(change.suggested_value);
+    });
+
+    setWhatIfValues(updatedValues);
+  };
+
+  function handleShowInGraph(values: Record<string, string>) {
+    const existingPoint = data.find((point) =>
+      pointMatchesWhatIfValues(point, values)
+    );
+
+    if (existingPoint) {
+      setTemporaryWhatIfPoint(null);
+      setSelection({ type: "point", point: existingPoint });
+      return;
+    }
+
+    const { x, y } = computeTemporaryUmapPosition(values);
+
+    const tempPoint: StudentPoint = {
+      id: "-1",
+      x,
+      y,
+      cluster: -1,
+
+      burnout_level: 50,
+      productivity_score: 50,
+      exam_score: 50,
+      mental_health_score: 50,
+      focus_index: 70,
+
+      age: Number(values.age),
+      gender: values.gender,
+      academic_level: values.academic_level,
+      study_hours: Number(values.study_hours),
+      self_study_hours: Number(values.self_study_hours),
+      online_classes_hours: Number(values.online_classes_hours),
+      social_media_hours: Number(values.social_media_hours),
+      gaming_hours: Number(values.gaming_hours),
+      sleep_hours: Number(values.sleep_hours),
+      screen_time_hours: Number(values.screen_time_hours),
+      exercise_minutes: Number(values.exercise_minutes),
+      caffeine_intake_mg: Number(values.caffeine_intake_mg),
+      part_time_job: Number(values.part_time_job),
+      upcoming_deadline: Number(values.upcoming_deadline),
+      internet_quality: values.internet_quality,
+    };
+
+    setTemporaryWhatIfPoint(tempPoint);
+    setSelection({ type: "point", point: tempPoint });
+  }
 
   return (
     <div className="app-shell">
@@ -310,9 +772,11 @@ export default function Dashboard() {
             value={target}
             onChange={(e) => setTarget(e.target.value)}
           >
+            <option value="exam">Exam score</option>
             <option value="stress">Burnout</option>
             <option value="productivity">Productivity</option>
-            <option value="exam">Exam score</option>
+            <option value="mental_health">Mental health score</option>
+            <option value="focus">Focus index</option>
           </select>
         </div>
       </header>
@@ -327,20 +791,31 @@ export default function Dashboard() {
           <div className="column-body">
             <UmapPanel
               data={data}
+              temporaryPoint={temporaryWhatIfPoint}
               colourBy={colourBy}
               onColourByChange={setColourBy}
               selection={selection}
-              onPointSelect={(point) => setSelection({ type: "point", point })}
-              onClusterSelect={(points) =>
+              onPointSelect={(point) => {
+                if (point.id !== "-1") {
+                  setTemporaryWhatIfPoint(null);
+                }
+                setSelection({ type: "point", point });
+              }}
+              onClusterSelect={(points) => {
+                setTemporaryWhatIfPoint(null);
                 setSelection(
                   points.length === 0
                     ? { type: "none" }
                     : points.length === 1
                     ? { type: "point", point: points[0] }
                     : { type: "cluster", points }
-                )
-              }
-              onClearSelection={() => setSelection({ type: "none" })}
+                );
+              }}
+              onClearSelection={() => {
+                setTemporaryWhatIfPoint(null);
+                setSelection({ type: "none" });
+                setLocalExplanation(null);
+              }}
             />
           </div>
         </section>
@@ -380,11 +855,18 @@ export default function Dashboard() {
         </section>
 
         <section className="column-shell">
-          <div className="column-header">What-If analysis</div>
+          <div className="column-header">Intervention analysis</div>
           <div className="column-body">
             <CounterfactualPanel
-              prediction={prediction}
+              prediction={{ ...prediction, currentLevel: derivedCurrentLevel }}
+              targetLabel={getUiTargetLabel(target)}
               onPredict={handlePredict}
+              onShowInGraph={handleShowInGraph}
+              counterfactualOptions={counterfactualOptions}
+              onTargetLevelChange={handleTargetLevelChange}
+              onSuggestChanges={handleSuggestChanges}
+              onApplyCounterfactual={handleApplyCounterfactual}
+              fillValues={whatIfFillValues}
             />
           </div>
         </section>
@@ -399,17 +881,14 @@ function mapUiTargetToBackendTarget(target: string): Target {
       return "productivity_score";
     case "exam":
       return "exam_score";
+    case "mental_health":
+      return "mental_health_score";
+    case "focus":
+      return "focus_index";
     case "stress":
     default:
       return "burnout_level";
   }
-}
-
-function parseRange(value: string | undefined, fallback: number) {
-  if (!value) return fallback;
-  const match = value.match(/(\d+)\s*-\s*(\d+)/);
-  if (!match) return fallback;
-  return (Number(match[1]) + Number(match[2])) / 2;
 }
 
 function parseNumber(value: string | undefined, fallback: number) {
@@ -417,15 +896,33 @@ function parseNumber(value: string | undefined, fallback: number) {
   return Number.isFinite(n) ? n : fallback;
 }
 
-function formatPredictionLabel(target: string, value: number) {
-  if (target === "productivity") return value.toFixed(2);
-  if (value < 33) return "LOW";
-  if (value < 66) return "MEDIUM";
-  return "HIGH";
+function formatPredictionLabel(
+  pred: PredictionResponse | null,
+  target: string,
+  fallbackValue?: number
+) {
+  if (!pred) return "-";
+
+  if ("predicted_level" in pred && typeof pred.predicted_level === "string") {
+    return pred.predicted_level.toUpperCase();
+  }
+
+  if (typeof fallbackValue === "number") {
+    if (fallbackValue < 33) return "LOW";
+    if (fallbackValue < 66) return "MEDIUM";
+    return "HIGH";
+  }
+
+  return "-";
 }
 
 function getTargetGoalLabel(target: string, value: number) {
-  if (target === "productivity") {
+  if (
+    target === "productivity" ||
+    target === "exam" ||
+    target === "mental_health" ||
+    target === "focus"
+  ) {
     if (value >= 75) return "HIGH";
     if (value >= 45) return "MEDIUM";
     return "LOW";
@@ -438,4 +935,178 @@ function getTargetGoalLabel(target: string, value: number) {
 
 function prettyFeatureName(name: string) {
   return name.replaceAll("_", " ");
+}
+
+function getUiTargetLabel(target: string) {
+  switch (target) {
+    case "stress":
+      return "Burnout";
+    case "productivity":
+      return "Productivity";
+    case "exam":
+      return "Exam score";
+    case "mental_health":
+      return "Mental health score";
+    case "focus":
+      return "Focus index";
+    default:
+      return "Prediction";
+  }
+}
+
+function normalizeCounterfactualResponse(raw: any): CounterfactualOption[] {
+  if (!raw) return [];
+
+  if (Array.isArray(raw)) {
+    return raw as CounterfactualOption[];
+  }
+
+  if (Array.isArray(raw.options)) {
+    return raw.options as CounterfactualOption[];
+  }
+
+  if (Array.isArray(raw.suggestions)) {
+    return [
+      {
+        option: 1,
+        changes: raw.suggestions,
+        effort: "Low",
+        new_level: "Improved",
+      },
+    ];
+  }
+
+  return [];
+}
+
+function round1(value: number) {
+  return Math.round(value * 10) / 10;
+}
+
+function average(nums: number[]) {
+  if (nums.length === 0) return 0;
+  return nums.reduce((a, b) => a + b, 0) / nums.length;
+}
+
+function mode(values: Array<string | number>) {
+  const counts = new Map<string, number>();
+
+  values.forEach((value) => {
+    const key = String(value);
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  });
+
+  let bestKey = String(values[0] ?? "");
+  let bestCount = -1;
+
+  counts.forEach((count, key) => {
+    if (count > bestCount) {
+      bestKey = key;
+      bestCount = count;
+    }
+  });
+
+  return bestKey;
+}
+
+function numericEqual(a: number, b: string, epsilon = 1e-9) {
+  return Math.abs(a - Number(b)) < epsilon;
+}
+
+function pointMatchesWhatIfValues(
+  point: StudentPoint,
+  values: Record<string, string>
+) {
+  for (const field of numericWhatIfFields) {
+    if (!numericEqual(Number(point[field]), values[field])) {
+      return false;
+    }
+  }
+
+  for (const field of categoricalWhatIfFields) {
+    if (String(point[field]) !== values[field]) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+function computeTemporaryUmapPosition(values: Record<string, string>) {
+  const study_hours = Number(values.study_hours);
+  const self_study_hours = Number(values.self_study_hours);
+  const social_media_hours = Number(values.social_media_hours);
+  const gaming_hours = Number(values.gaming_hours);
+  const sleep_hours = Number(values.sleep_hours);
+  const screen_time_hours = Number(values.screen_time_hours);
+  const exercise_minutes = Number(values.exercise_minutes);
+
+  const focus_index = 70;
+  const burnout_level = 50;
+
+  const x =
+    study_hours * 0.8 +
+    self_study_hours * 0.4 +
+    focus_index * 0.03 -
+    burnout_level * 0.02;
+
+  const y =
+    sleep_hours * 0.9 -
+    social_media_hours * 0.35 -
+    gaming_hours * 0.2 -
+    screen_time_hours * 0.1 +
+    exercise_minutes * 0.01;
+
+  return { x, y };
+}
+
+function inputsToWhatIfValues(
+  inputs: BackendPredictionInput
+): Record<string, string> {
+  return {
+    age: String(inputs.age),
+    gender: String(inputs.gender),
+    academic_level: String(inputs.academic_level),
+    study_hours: String(inputs.study_hours),
+    self_study_hours: String(inputs.self_study_hours),
+    online_classes_hours: String(inputs.online_classes_hours),
+    social_media_hours: String(inputs.social_media_hours),
+    gaming_hours: String(inputs.gaming_hours),
+    sleep_hours: String(inputs.sleep_hours),
+    screen_time_hours: String(inputs.screen_time_hours),
+    exercise_minutes: String(inputs.exercise_minutes),
+    caffeine_intake_mg: String(inputs.caffeine_intake_mg),
+    part_time_job: String(inputs.part_time_job),
+    upcoming_deadline: String(inputs.upcoming_deadline),
+    internet_quality: String(inputs.internet_quality),
+  };
+}
+
+function getPointTargetValue(point: StudentPoint, target: string): number {
+  switch (target) {
+    case "stress":
+      return point.burnout_level;
+    case "productivity":
+      return point.productivity_score;
+    case "exam":
+      return point.exam_score;
+    case "mental_health":
+      return point.mental_health_score;
+    case "focus":
+      return point.focus_index;
+    default:
+      return point.burnout_level;
+  }
+}
+
+function getLevelFromTargetValue(target: string, value: number): string {
+  if (target === "stress") {
+    if (value < 33) return "LOW";
+    if (value < 66) return "MEDIUM";
+    return "HIGH";
+  }
+
+  if (value >= 75) return "HIGH";
+  if (value >= 45) return "MEDIUM";
+  return "LOW";
 }

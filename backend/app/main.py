@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from typing import List
 
 from app.data_loader import load_data
 from app.model_service import (
@@ -12,7 +13,8 @@ from app.model_service import (
 )
 from app.schemas import (
     ClusterSummaryResponse,
-    CounterfactualResponse,
+    CounterfactualOption,
+    CounterfactualRequest,
     FeatureImportanceResponse,
     LocalExplanationResponse,
     PredictRequest,
@@ -64,7 +66,6 @@ def feature_importance(target: str):
         "used_placeholder_model": True,
     }
 
-
 @app.post("/model/predict", response_model=PredictionResponse)
 def predict(request: PredictRequest):
     return predict_placeholder(request.target, request.inputs.model_dump())
@@ -91,18 +92,9 @@ def umap():
     }
 
 
-@app.post("/model/counterfactual", response_model=CounterfactualResponse)
-def counterfactual(request: PredictRequest):
-    original = predict_placeholder(request.target, request.inputs.model_dump())
-    suggestions = generate_counterfactual_placeholder(
-        request.target, request.inputs.model_dump()
-    )
-    return {
-        "target": request.target,
-        "original_prediction": original,
-        "suggestions": suggestions,
-        "used_placeholder_model": True,
-    }
+@app.post("/model/counterfactual", response_model=List[CounterfactualOption])
+def model_counterfactual(req: CounterfactualRequest):
+    return generate_counterfactual_placeholder(req.target, req.inputs.model_dump())
 
 
 @app.get("/model/cluster-summary/{cluster_id}", response_model=ClusterSummaryResponse)

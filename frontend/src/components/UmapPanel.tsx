@@ -13,6 +13,7 @@ type SelectionState =
 
 type Props = {
   data: StudentPoint[];
+  temporaryPoint?: StudentPoint[] | null;
   colourBy: string;
   onColourByChange: (value: string) => void;
   selection: SelectionState;
@@ -44,6 +45,7 @@ const colourOptions = [
 
 export default function UmapPanel({
   data,
+  temporaryPoint,
   colourBy,
   onColourByChange,
   selection,
@@ -59,6 +61,25 @@ export default function UmapPanel({
     const value = d[colourBy as keyof StudentPoint];
     return typeof value === "number" ? value : 0;
   });
+
+  const temporaryTrace =
+    temporaryPoint
+      ? {
+          x: [temporaryPoint.x],
+          y: [temporaryPoint.y],
+          type: "scatter",
+          mode: "markers",
+          name: "What-if point",
+          showlegend: false,
+          marker: {
+            size: 13,
+            color: "#111",
+            opacity: 1,
+            line: { color: "#111", width: 2 },
+          },
+          hovertemplate: "What-if point<extra></extra>",
+        }
+      : null;
 
   const selectedIds =
     selection.type === "point"
@@ -144,8 +165,8 @@ export default function UmapPanel({
               selected: {
                 marker: {
                   size: 13,
-                  opacity: 1,
-                  line: { color: "#111", width: 2 },
+                  opacity: 2,
+                  line: { color: "DarkSlateGrey" },
                 },
               },
               unselected: {
@@ -156,6 +177,7 @@ export default function UmapPanel({
               hovertemplate:
                 "ID: %{customdata}<br>x: %{x:.2f}<br>y: %{y:.2f}<extra></extra>",
             },
+            ...(temporaryTrace ? [temporaryTrace] : []),
           ]}
           layout={{
             autosize: true,
@@ -181,23 +203,24 @@ export default function UmapPanel({
       </div>
 
       <div className="umap-controls">
-        <label htmlFor="colour-by-select" className="umap-control-label">
-          Colour by
-        </label>
-        <select
-          id="colour-by-select"
-          className="umap-select"
-          value={colourBy}
-          onChange={(e) => onColourByChange(e.target.value)}
-        >
-          {colourOptions.map((option) => (
+        <label className="umap-controls-label">Colour by:</label>
+
+        <div className="umap-select-wrap">
+          <select
+            className="umap-select"
+            value={colourBy}
+            onChange={(e) => onColourByChange(e.target.value)}
+          >
+            {colourOptions.map((option) => (
             <option key={option.value} value={option.value}>
               {option.label}
             </option>
           ))}
-        </select>
+          </select>
+          <span className="umap-select-arrow">▼</span>
+        </div>
 
-        <button className="clear-selection-btn" onClick={onClearSelection}>
+        <button className="umap-clear-btn" onClick={onClearSelection}>
           Clear selection
         </button>
       </div>

@@ -1,4 +1,5 @@
-export type Target = "burnout_level" | "productivity_score" | "exam_score";
+
+export type Target = "burnout_level" | "productivity_score" | "exam_score" | "mental_health_score" | "focus_index";
 
 export type BackendPredictionInput = {
   age: number;
@@ -16,8 +17,6 @@ export type BackendPredictionInput = {
   part_time_job: number;
   upcoming_deadline: number;
   internet_quality: string;
-  mental_health_score: number;
-  focus_index: number;
 };
 
 export type PredictRequest = {
@@ -27,7 +26,7 @@ export type PredictRequest = {
 
 export type PredictionResponse = {
   target: Target;
-  predicted_value: number;
+  predicted_level: string;
   confidence: number;
   used_placeholder_model: boolean;
 };
@@ -82,6 +81,8 @@ export type ClusterSummaryResponse = {
   avg_productivity: number;
   avg_burnout: number;
   avg_exam_score: number;
+  avg_mental_health_score: number;
+  avg_focus_index: number;
   top_features: string[];
   used_placeholder_model: boolean;
 };

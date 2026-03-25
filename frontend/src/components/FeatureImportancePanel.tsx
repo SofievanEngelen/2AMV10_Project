@@ -136,7 +136,7 @@ export default function FeatureImportancePanel({
                 layout={{
                   autosize: true,
                   height: chartHeight,
-                  margin: { l: 40, r: 20, t: hasLocal ? 10 : 0, b: 0 },
+                  margin: { l: 40, r: 20, t: hasLocal ? 20 : 0, b: 0 },
                   barmode: hasLocal ? "group" : "relative",
                   xaxis: {
                     range: [0, maxValue],
@@ -159,7 +159,7 @@ export default function FeatureImportancePanel({
                     ? {
                         orientation: "h",
                         x: 0,
-                        y: 1.08,
+                        y: 1.1,
                         font: { size: 10 },
                       }
                     : undefined,
