@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useEffect, useState } from "react";
 import type {
   BackendPredictionInput,
 } from "../api/types";
@@ -16,10 +16,12 @@ type Props = {
   prediction: LegacyPrediction;
   targetLabel: string;
   onPredict: (values: Record<string, string>) => void;
+  onShowInGraph?: (values: Record<string, string>) => void;
   counterfactualOptions?: CounterfactualOption[];
   onTargetLevelChange?: (value: string) => void;
   onSuggestChanges?: () => void;
   onApplyCounterfactual?: (option: CounterfactualOption) => void;
+  fillValues?: Record<string, string> | null;
 };
 
 const whatIfFields = [
@@ -103,43 +105,33 @@ function formatValue(feature: string, value: number | string) {
 
   if (feature === "exercise_minutes") {
     const hours = value / 60;
-    return Number.isInteger(hours) ? `${hours}` : `${hours.toFixed(1)}`;
+    return Number.isInteger(hours) ? `${hours}` : `${hours.toFixed(2)}`;
   }
 
   return `${value}`;
-}
-
-function formatUnit(feature: string) {
-  if (
-    feature === "study_hours" ||
-    feature === "screen_time_hours" ||
-    feature === "social_media_hours" ||
-    feature === "sleep_hours" ||
-    feature === "self_study_hours" ||
-    feature === "online_classes_hours" ||
-    feature === "gaming_hours"
-  ) {
-    return " hours";
-  }
-
-  if (feature === "exercise_minutes") {
-    return " hours";
-  }
-
-  return "";
 }
 
 export default function CounterfactualPanel({
   prediction,
   targetLabel,
   onPredict,
+  onShowInGraph,
   counterfactualOptions = [],
   onTargetLevelChange,
   onSuggestChanges,
   onApplyCounterfactual,
+  fillValues,
 }: Props) {
   const [activeTab, setActiveTab] = useState<"whatif" | "counterfactuals">("whatif");
   const [values, setValues] = useState<Record<string, string>>(initialFormValues);
+
+  useEffect(() => {
+  if (!fillValues) return;
+  setValues((prev) => ({
+    ...prev,
+    ...fillValues,
+  }));
+}, [fillValues]);
 
   const renderedOptions = useMemo(() => counterfactualOptions.slice(0, 3), [counterfactualOptions]);
 
@@ -209,9 +201,19 @@ export default function CounterfactualPanel({
             ))}
           </div>
 
-          <button className="whatif-predict-button" onClick={() => onPredict(values)}>
-            Predict
-          </button>
+          <div className="whatif-action-row">
+            <button className="whatif-predict-button" onClick={() => onPredict(values)}>
+              Predict
+            </button>
+
+            <button
+              className="whatif-show-button"
+              onClick={() => onShowInGraph?.(values)}
+              type="button"
+            >
+              Show in graph
+            </button>
+          </div>
 
           <div className="whatif-prediction-block">
             <div className="whatif-prediction-title">Prediction</div>

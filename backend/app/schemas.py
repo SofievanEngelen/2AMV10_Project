@@ -34,7 +34,7 @@ class CounterfactualRequest(BaseModel):
 
 class PredictionResponse(BaseModel):
     target: Literal["burnout_level", "productivity_score", "exam_score", "mental_health_score", "focus_index"]
-    predicted_value: float
+    predicted_level: str
     confidence: float
     used_placeholder_model: bool = True
 

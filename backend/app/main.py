@@ -66,7 +66,6 @@ def feature_importance(target: str):
         "used_placeholder_model": True,
     }
 
-
 @app.post("/model/predict", response_model=PredictionResponse)
 def predict(request: PredictRequest):
     return predict_placeholder(request.target, request.inputs.model_dump())

@@ -26,7 +26,7 @@ export type PredictRequest = {
 
 export type PredictionResponse = {
   target: Target;
-  predicted_value: number;
+  predicted_level: string;
   confidence: number;
   used_placeholder_model: boolean;
 };

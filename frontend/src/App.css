@@ -180,7 +180,7 @@ textarea:focus {
   flex: 1;
   min-height: 0;
   display: grid;
-  grid-template-columns: 1.15fr 1fr 1fr;
+  grid-template-columns: 1.15fr 0.9fr 1.2fr;
   gap: 10px;
   padding: 10px;
   overflow: hidden;
@@ -272,7 +272,7 @@ textarea:focus {
 
 /* Label */
 .umap-controls-label {
-  font-size: 22px;
+  font-size: 18px;
   font-weight: 500;
   color: #333;
   white-space: nowrap;
@@ -292,7 +292,7 @@ textarea:focus {
   border: 3px solid #7f7f7f;
   border-radius: 10px;
   background: #f4f4f4;
-  font-size: 18px;
+  font-size: 15px;
   font-weight: 500;
   color: #333;
 
@@ -319,16 +319,12 @@ textarea:focus {
   padding: 0 18px;
   border: 3px solid #7f7f7f;
   border-radius: 10px;
-  background: #d3d3d3;
+  background: #c8c8c8;
   font-size: 16px;
   font-weight: 600;
   color: #333;
   cursor: pointer;
   white-space: nowrap;
-}
-
-.umap-clear-btn:hover {
-  background: #c8c8c8;
 }
 
 /* Middle column layout */
@@ -636,7 +632,7 @@ textarea:focus {
   flex-direction: column;
   height: 100%;
   background: #d9d9d9;
-  border: 2px solid #16313d;
+  /*border: 2px solid #16313d;*/
   box-sizing: border-box;
 }
 
@@ -753,17 +749,26 @@ textarea:focus {
   color: #555;
 }
 
-.whatif-predict-button {
-  margin-top: 10px;
-  width: 100%;
-  padding: 10px 12px;
-  border: 3px solid #8a8a8a;
-  border-radius: 8px;
-  background: #b7b7b7;
-  color: #454545;
+.whatif-action-row {
+  display: flex;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.whatif-predict-button,
+.whatif-show-button {
+  height: 42px;
+  padding: 0 18px;
+  border: 2px solid #7f7f7f;
+  border-radius: 10px;
   font-size: 16px;
-  font-weight: 800;
+  font-weight: 700;
   cursor: pointer;
+}
+
+.whatif-show-button {
+  background: #e5e5e5;
+  color: #333;
 }
 
 .whatif-prediction-block {

@@ -115,6 +115,15 @@ def get_global_feature_importance_placeholder(target: str) -> List[dict]:
     return [{"feature": f, "importance": v} for f, v in values]
 
 
+def map_to_level(value: float) -> str:
+    if value < 33:
+        return "Low"
+    elif value < 66:
+        return "Medium"
+    else:
+        return "High"
+
+
 def predict_placeholder(target: str, payload: Dict) -> Dict:
     if target == "burnout_level":
         value = (
@@ -182,11 +191,12 @@ def predict_placeholder(target: str, payload: Dict) -> Dict:
         raise ValueError(f"Unsupported target: {target}")
 
     value = max(0.0, min(100.0, value))
+    level = map_to_level(value)
 
     return {
         "target": target,
-        "predicted_value": round(value, 2),
-        "confidence": confidence,
+        "predicted_level": level,
+        "confidence": round(confidence, 2),
         "used_placeholder_model": True,
     }
 
