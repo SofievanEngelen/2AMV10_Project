@@ -1,7 +1,0 @@
-student_id,age,gender,study_hours_per_day,sleep_hours,phone_usage_hours,social_media_hours,youtube_hours,gaming_hours,breaks_per_day,coffee_intake_mg,exercise_minutes,assignments_completed,attendance_percentage,stress_level,focus_score,final_grade,productivity_score
-1,20,Female,5.0,High,Morning,3.0,1.5,0.5,20,8.0,Low,Moderate,82,88,92,95,8.1
-2,22,Male,3.0,Medium,Evening,6.5,3.0,2.0,60,6.0,High,Low,61,58,76,72,6.4
-3,21,Female,4.0,Medium,Night,5.0,2.8,1.0,48,6.5,Medium,Moderate,70,69,84,83,7.0
-4,19,Male,6.0,High,Morning,2.5,1.0,0.3,18,8.2,Low,High,86,91,95,97,8.8
-5,23,Female,2.5,Low,Night,7.0,4.2,2.8,75,5.8,High,Low,55,49,68,65,5.9
-6,20,Non-binary,4.5,High,Evening,4.0,2.0,0.8,30,7.3,Medium,Moderate,77,81,89,90,7.9

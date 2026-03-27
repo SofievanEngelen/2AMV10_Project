@@ -1,8 +1,5 @@
-import { useMemo, useEffect, useState } from "react";
-import type {
-  BackendPredictionInput,
-} from "../api/types";
-import type { CounterfactualOption } from "../Dashboard";
+import { useEffect, useMemo, useState } from "react";
+import type { CounterfactualOption } from "../Dashboard_old.tsx";
 
 type LegacyPrediction = {
   stressLevel: string;
@@ -11,17 +8,19 @@ type LegacyPrediction = {
   targetLevel: string;
 };
 
+type StyledCounterfactualOption = CounterfactualOption & {
+  color?: string;
+  symbol?: string;
+  label?: string;
+  index?: number;
+};
+
 type Props = {
   prediction: LegacyPrediction;
   targetLabel: string;
   onPredict: (values: Record<string, string>) => void;
   onShowInGraph?: (values: Record<string, string>) => void;
-  counterfactualOptions?: (CounterfactualOption & {
-    color?: string;
-    symbol?: string;
-    label?: string;
-    index?: number;
-  })[];
+  counterfactualOptions?: StyledCounterfactualOption[];
   onTargetLevelChange?: (value: string) => void;
   onSuggestChanges?: () => void;
   onApplyCounterfactual?: (option: CounterfactualOption) => void;
@@ -31,7 +30,21 @@ type Props = {
   selectedIndex?: number | null;
 };
 
-const whatIfFields = [
+type WhatIfField =
+  | {
+      key: string;
+      label: string;
+      type: "number";
+      step?: string;
+    }
+  | {
+      key: string;
+      label: string;
+      type: "select";
+      options: string[];
+    };
+
+const whatIfFields: readonly WhatIfField[] = [
   { key: "age", label: "Age", type: "number" },
   {
     key: "gender",
@@ -46,12 +59,32 @@ const whatIfFields = [
     options: ["Undergraduate", "Graduate"],
   },
   { key: "study_hours", label: "Study hours", type: "number", step: "0.1" },
-  { key: "self_study_hours", label: "Self study hours", type: "number", step: "0.1" },
-  { key: "online_classes_hours", label: "Online classes hours", type: "number", step: "0.1" },
-  { key: "social_media_hours", label: "Social media hours", type: "number", step: "0.1" },
+  {
+    key: "self_study_hours",
+    label: "Self study hours",
+    type: "number",
+    step: "0.1",
+  },
+  {
+    key: "online_classes_hours",
+    label: "Online classes hours",
+    type: "number",
+    step: "0.1",
+  },
+  {
+    key: "social_media_hours",
+    label: "Social media hours",
+    type: "number",
+    step: "0.1",
+  },
   { key: "gaming_hours", label: "Gaming hours", type: "number", step: "0.1" },
   { key: "sleep_hours", label: "Sleep hours", type: "number", step: "0.1" },
-  { key: "screen_time_hours", label: "Screen time hours", type: "number", step: "0.1" },
+  {
+    key: "screen_time_hours",
+    label: "Screen time hours",
+    type: "number",
+    step: "0.1",
+  },
   { key: "exercise_minutes", label: "Exercise minutes", type: "number" },
   { key: "caffeine_intake_mg", label: "Caffeine intake", type: "number" },
   {
@@ -92,7 +125,8 @@ const initialFormValues: Record<string, string> = {
   internet_quality: "Good",
 };
 
-function prettyFeatureName(name: string) {
+/** Convert backend feature keys into more readable labels. */
+function prettyFeatureName(name: string): string {
   const map: Record<string, string> = {
     study_hours: "Study hours",
     screen_time_hours: "Screen time hours",
@@ -104,18 +138,25 @@ function prettyFeatureName(name: string) {
     focus_index: "Focus index",
     gaming_hours: "Gaming hours",
   };
+
   return map[name] ?? name.replaceAll("_", " ");
 }
 
-function formatValue(feature: string, value: number | string) {
+/** Format values shown inside counterfactual change rows. */
+function formatValue(feature: string, value: number | string): string {
   if (typeof value === "string") return value;
 
   if (feature === "exercise_minutes") {
     const hours = value / 60;
-    return Number.isInteger(hours) ? `${hours.toFixed(2)}` : `${hours.toFixed(2)}`;
+    return `${hours.toFixed(2)}`;
   }
 
-  return `${value.toFixed(2)}`;
+  return value.toFixed(2);
+}
+
+function toTitleCase(value: string): string {
+  const lower = value.toLowerCase();
+  return lower.charAt(0).toUpperCase() + lower.slice(1);
 }
 
 export default function CounterfactualPanel({
@@ -132,18 +173,31 @@ export default function CounterfactualPanel({
   onSelectOption,
   selectedIndex,
 }: Props) {
-  const [activeTab, setActiveTab] = useState<"whatif" | "counterfactuals">("whatif");
+  const [activeTab, setActiveTab] = useState<"whatif" | "counterfactuals">(
+    "whatif"
+  );
   const [values, setValues] = useState<Record<string, string>>(initialFormValues);
 
   useEffect(() => {
-  if (!fillValues) return;
-  setValues((prev) => ({
-    ...prev,
-    ...fillValues,
-  }));
-}, [fillValues]);
+    if (!fillValues) return;
 
-  const renderedOptions = useMemo(() => counterfactualOptions.slice(0, 3), [counterfactualOptions]);
+    setValues((prev) => ({
+      ...prev,
+      ...fillValues,
+    }));
+  }, [fillValues]);
+
+  const renderedOptions = useMemo(
+    () => counterfactualOptions.slice(0, 3),
+    [counterfactualOptions]
+  );
+
+  const updateFieldValue = (key: string, value: string) => {
+    setValues((prev) => ({
+      ...prev,
+      [key]: value,
+    }));
+  };
 
   return (
     <div className="cf-root">
@@ -155,7 +209,9 @@ export default function CounterfactualPanel({
           What-If
         </button>
         <button
-          className={`cf-top-tab ${activeTab === "counterfactuals" ? "active" : ""}`}
+          className={`cf-top-tab ${
+            activeTab === "counterfactuals" ? "active" : ""
+          }`}
           onClick={() => setActiveTab("counterfactuals")}
         >
           Counterfactuals
@@ -165,9 +221,10 @@ export default function CounterfactualPanel({
       {activeTab === "whatif" ? (
         <div className="whatif-view">
           <p className="cf-description">
-            Adjust values like sleep, study time, or phone usage to see how the prediction changes.
-            The system updates the outcome and shows where the student would move in the UMAP,
-            helping you explore which changes could improve your target.
+            Adjust values like sleep, study time, or phone usage to see how the
+            prediction changes. The system updates the outcome and shows where
+            the student would move in the UMAP, helping you explore which
+            changes could improve your target.
           </p>
 
           <div className="whatif-form">
@@ -180,12 +237,7 @@ export default function CounterfactualPanel({
                   <select
                     className="whatif-input"
                     value={values[field.key]}
-                    onChange={(e) =>
-                      setValues((prev) => ({
-                        ...prev,
-                        [field.key]: e.target.value,
-                      }))
-                    }
+                    onChange={(e) => updateFieldValue(field.key, e.target.value)}
                   >
                     {field.options.map((option) => (
                       <option key={option} value={option}>
@@ -199,12 +251,7 @@ export default function CounterfactualPanel({
                     type="number"
                     step={field.step ?? "1"}
                     value={values[field.key]}
-                    onChange={(e) =>
-                      setValues((prev) => ({
-                        ...prev,
-                        [field.key]: e.target.value,
-                      }))
-                    }
+                    onChange={(e) => updateFieldValue(field.key, e.target.value)}
                   />
                 )}
               </div>
@@ -213,9 +260,9 @@ export default function CounterfactualPanel({
 
           <div className="whatif-action-row">
             <button
-                className="whatif-predict-button"
-                onClick={() => onPredict(values)}
-                type="submit"
+              className="whatif-predict-button"
+              onClick={() => onPredict(values)}
+              type="submit"
             >
               Predict
             </button>
@@ -234,11 +281,15 @@ export default function CounterfactualPanel({
             <div className="whatif-prediction-grid">
               <div className="whatif-prediction-item">
                 <div className="whatif-prediction-label">{targetLabel}</div>
-                <div className="whatif-prediction-value">{prediction.stressLevel}</div>
+                <div className="whatif-prediction-value">
+                  {prediction.stressLevel}
+                </div>
               </div>
               <div className="whatif-prediction-item">
                 <div className="whatif-prediction-label">Confidence</div>
-                <div className="whatif-prediction-value">{prediction.confidence}</div>
+                <div className="whatif-prediction-value">
+                  {prediction.confidence}
+                </div>
               </div>
             </div>
           </div>
@@ -246,15 +297,18 @@ export default function CounterfactualPanel({
       ) : (
         <div className="counterfactuals-view">
           <p className="cf-description cf-description-counterfactuals">
-            This view shows small, realistic changes to your inputs that would improve the
-            predicted outcome. Each option represents a different way to reach a better
-            target level, helping you understand what adjustments have the most impact.
+            This view shows small, realistic changes to your inputs that would
+            improve the predicted outcome. Each option represents a different
+            way to reach a better target level, helping you understand what
+            adjustments have the most impact.
           </p>
 
           <div className="cf-levels-block">
             <div className="cf-level-row">
               <div className="cf-level-row-label">Current level:</div>
-              <div className="cf-level-box">{toTitleCase(prediction.currentLevel)}</div>
+              <div className="cf-level-box">
+                {toTitleCase(prediction.currentLevel)}
+              </div>
             </div>
 
             <div className="cf-level-row">
@@ -263,7 +317,9 @@ export default function CounterfactualPanel({
                 <select
                   className="cf-level-select"
                   value={toTitleCase(prediction.targetLevel)}
-                  onChange={(e) => onTargetLevelChange?.(e.target.value.toUpperCase())}
+                  onChange={(e) =>
+                    onTargetLevelChange?.(e.target.value.toUpperCase())
+                  }
                 >
                   <option value="Low">Low</option>
                   <option value="Medium">Medium</option>
@@ -274,21 +330,24 @@ export default function CounterfactualPanel({
             </div>
           </div>
 
-          <button className="cf-button suggest-button" onClick={() => onSuggestChanges?.()}>
+          <button
+            className="cf-button suggest-button"
+            onClick={() => onSuggestChanges?.()}
+          >
             Suggest changes
           </button>
 
-
           <div className="cf-options-list">
             {renderedOptions.map((option) => (
-              <div className="cf-option-card"
-                   key={option.option}
-                   style={{
-                     borderLeft: `6px solid ${option.color ?? "#999"}`,
-                   }}
-                   onMouseEnter={() => onHoverOption?.(option.index ?? null)}
-                   onMouseLeave={() => onHoverOption?.(null)}
-                   onClick={() => onSelectOption?.(option.index ?? 0)}
+              <div
+                className="cf-option-card"
+                key={option.option}
+                style={{
+                  borderLeft: `6px solid ${option.color ?? "#999"}`,
+                }}
+                onMouseEnter={() => onHoverOption?.(option.index ?? null)}
+                onMouseLeave={() => onHoverOption?.(null)}
+                onClick={() => onSelectOption?.(option.index ?? 0)}
               >
                 <div className="cf-option-header">
                   <span
@@ -315,7 +374,6 @@ export default function CounterfactualPanel({
                           {formatValue(change.feature, change.current_value)}
                           {"->"}
                           {formatValue(change.feature, change.suggested_value)}
-                          {/*{formatUnit(change.feature)}*/}
                         </span>
                       </div>
                     ))}
@@ -349,7 +407,9 @@ export default function CounterfactualPanel({
                 <div className="cf-option-body">
                   <div className="cf-option-left">
                     <div className="cf-change-row">
-                      <span className="cf-change-feature">No suggestions available</span>
+                      <span className="cf-change-feature">
+                        No suggestions available
+                      </span>
                     </div>
                   </div>
                   <div className="cf-option-right">
@@ -373,9 +433,4 @@ export default function CounterfactualPanel({
       )}
     </div>
   );
-}
-
-function toTitleCase(value: string) {
-  const lower = value.toLowerCase();
-  return lower.charAt(0).toUpperCase() + lower.slice(1);
 }

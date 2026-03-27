@@ -10,14 +10,17 @@ import {
   fetchCounterfactuals,
   fetchFeatureImportance,
   fetchLocalExplanation,
-  fetchPrediction, fetchStrategyAtlas, fetchStrategyAtlasProjection,
+  fetchPrediction,
+  fetchStrategyAtlas,
+  fetchStrategyAtlasProjection,
 } from "./api/client";
 import type {
   BackendPredictionInput,
   ClusterSummaryResponse,
   FeatureImportanceItem,
   LocalExplanationResponse,
-  PredictionResponse, StrategyAtlasBackground,
+  PredictionResponse,
+  StrategyAtlasBackground,
   Target,
 } from "./api/types";
 
@@ -61,6 +64,8 @@ type LegacyPrediction = {
   currentLevel: string;
   targetLevel: string;
 };
+
+type MiddleSectionKey = "analysis" | "importance" | "strategies";
 
 const numericWhatIfFields = [
   "age",
@@ -114,28 +119,76 @@ const defaultInputs: BackendPredictionInput = {
   internet_quality: "Good",
 };
 
+const COUNTERFACTUAL_STYLES = [
+  { color: "#013220", symbol: "star" as const, label: "Strategy 1" },
+  { color: "#00008B", symbol: "star" as const, label: "Strategy 2" },
+  { color: "#8B0000", symbol: "star" as const, label: "Strategy 3" },
+];
+
+const STRATEGY_COLOURS = ["#2f7ed8", "#f27c2a", "#58b43d"];
+
+/**
+ * Convert form values into the backend payload shape.
+ * Keeps number parsing in one place so all interactions stay consistent.
+ */
+function valuesToBackendInputs(
+  values: Record<string, string>,
+  fallback: BackendPredictionInput = defaultInputs
+): BackendPredictionInput {
+  return {
+    age: parseInt(values.age ?? `${fallback.age}`, 10),
+    gender: values.gender || fallback.gender,
+    academic_level: values.academic_level || fallback.academic_level,
+    study_hours: parseNumber(values.study_hours, fallback.study_hours),
+    self_study_hours: parseNumber(
+      values.self_study_hours,
+      fallback.self_study_hours
+    ),
+    online_classes_hours: parseNumber(
+      values.online_classes_hours,
+      fallback.online_classes_hours
+    ),
+    social_media_hours: parseNumber(
+      values.social_media_hours,
+      fallback.social_media_hours
+    ),
+    gaming_hours: parseNumber(values.gaming_hours, fallback.gaming_hours),
+    sleep_hours: parseNumber(values.sleep_hours, fallback.sleep_hours),
+    screen_time_hours: parseNumber(
+      values.screen_time_hours,
+      fallback.screen_time_hours
+    ),
+    exercise_minutes: parseNumber(
+      values.exercise_minutes,
+      fallback.exercise_minutes
+    ),
+    caffeine_intake_mg: parseNumber(
+      values.caffeine_intake_mg,
+      fallback.caffeine_intake_mg
+    ),
+    part_time_job: parseInt(
+      values.part_time_job ?? `${fallback.part_time_job}`,
+      10
+    ),
+    upcoming_deadline: parseInt(
+      values.upcoming_deadline ?? `${fallback.upcoming_deadline}`,
+      10
+    ),
+    internet_quality: values.internet_quality || fallback.internet_quality,
+  };
+}
+
 export default function Dashboard() {
   const [target, setTarget] = useState("exam");
   const [colourBy, setColourBy] = useState("cluster");
   const [selection, setSelection] = useState<SelectionState>({ type: "none" });
-  const [atlasBackground, setAtlasBackground] = useState<StrategyAtlasBackground | null>(null);
-  const [strategyProfiles, setStrategyProfiles] = useState([]);
+  const [atlasBackground, setAtlasBackground] =
+    useState<StrategyAtlasBackground | null>(null);
+  const [strategyProfiles, setStrategyProfiles] = useState<any[]>([]);
 
-  type MiddleSectionKey = "analysis" | "importance" | "strategies";
-
-  const [openMiddleSections, setOpenMiddleSections] = useState<MiddleSectionKey[]>([
-    "analysis",
-    "importance",
-  ]);
-
-  const isMiddleSectionOpen = (key: MiddleSectionKey) =>
-    openMiddleSections.includes(key);
-
-  const handleMiddleSectionClick = (key: MiddleSectionKey) => {
-    if (openMiddleSections.includes(key)) return;
-
-    setOpenMiddleSections(([first, second]) => [second, key]);
-  };
+  const [openMiddleSections, setOpenMiddleSections] = useState<
+    MiddleSectionKey[]
+  >(["analysis", "importance"]);
 
   const [prediction, setPrediction] = useState<LegacyPrediction>({
     stressLevel: "MEDIUM",
@@ -163,22 +216,21 @@ export default function Dashboard() {
     useState<BackendPredictionInput>(defaultInputs);
   const [temporaryWhatIfPoint, setTemporaryWhatIfPoint] =
     useState<StudentPoint | null>(null);
-  const [whatIfValues, setWhatIfValues] = useState<Record<string, string> | null>(null);
-
-  const COUNTERFACTUAL_STYLES = [
-    { color: "#013220",  symbol: "star" as const, label: "Strategy 1" },
-    { color: "#00008B", symbol: "star" as const, label: "Strategy 2" },
-    { color: "#8B0000", symbol: "star" as const, label: "Strategy 3" },
-  ];
-
-  const STRATEGY_COLOURS = [
-    "#2f7ed8", // Strategy 1 / Cluster 0
-    "#f27c2a", // Strategy 2 / Cluster 1
-    "#58b43d", // Strategy 3 / Cluster 2
-  ];
+  const [whatIfValues, setWhatIfValues] =
+    useState<Record<string, string> | null>(null);
 
   const [selectedCfIndex, setSelectedCfIndex] = useState<number | null>(null);
   const [hoveredCfIndex, setHoveredCfIndex] = useState<number | null>(null);
+  const [previewCounterfactualPoint, setPreviewCounterfactualPoint] =
+    useState<StudentPoint | null>(null);
+
+  const isMiddleSectionOpen = (key: MiddleSectionKey) =>
+    openMiddleSections.includes(key);
+
+  const handleMiddleSectionClick = (key: MiddleSectionKey) => {
+    if (openMiddleSections.includes(key)) return;
+    setOpenMiddleSections(([first, second]) => [second, key]);
+  };
 
   const styledCounterfactuals = useMemo(() => {
     return counterfactualOptions.map((option, index) => ({
@@ -189,9 +241,6 @@ export default function Dashboard() {
   }, [counterfactualOptions]);
 
   const activeCfIndex = selectedCfIndex ?? hoveredCfIndex ?? null;
-
-  const [previewCounterfactualPoint, setPreviewCounterfactualPoint] =
-  useState<StudentPoint | null>(null);
 
   useEffect(() => {
     async function loadStrategyAtlas() {
@@ -232,7 +281,9 @@ export default function Dashboard() {
           }))
         );
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to load Strategy Atlas");
+        setError(
+          err instanceof Error ? err.message : "Failed to load Strategy Atlas"
+        );
         setBackendData([]);
       }
     }
@@ -301,12 +352,8 @@ export default function Dashboard() {
                 gaming_hours: avg(selection.points, "gaming_hours"),
                 sleep_hours: avg(selection.points, "sleep_hours"),
                 screen_time_hours: avg(selection.points, "screen_time_hours"),
-                exercise_minutes: Math.round(
-                  avg(selection.points, "exercise_minutes")
-                ),
-                caffeine_intake_mg: Math.round(
-                  avg(selection.points, "caffeine_intake_mg")
-                ),
+                exercise_minutes: avg(selection.points, "exercise_minutes"),
+                caffeine_intake_mg: avg(selection.points, "caffeine_intake_mg"),
                 part_time_job: Math.round(avg(selection.points, "part_time_job")),
                 upcoming_deadline: Math.round(
                   avg(selection.points, "upcoming_deadline")
@@ -357,7 +404,6 @@ export default function Dashboard() {
   }, [selection]);
 
   useEffect(() => {
-    setPrediction(null);
     setCounterfactualOptions([]);
   }, [target, selection]);
 
@@ -407,9 +453,7 @@ export default function Dashboard() {
     const result: Record<string, string> = {};
 
     for (const field of numericWhatIfFields) {
-      result[field] = String(
-        round1(average(points.map((p) => Number(p[field]))))
-      );
+      result[field] = String(round1(average(points.map((p) => Number(p[field])))));
     }
 
     for (const field of categoricalWhatIfFields) {
@@ -427,63 +471,8 @@ export default function Dashboard() {
 
   useEffect(() => {
     if (!whatIfFillValues) return;
-
-    setLatestInputs({
-      age: parseInt(whatIfFillValues.age ?? `${defaultInputs.age}`, 10),
-      gender: whatIfFillValues.gender || defaultInputs.gender,
-      academic_level:
-        whatIfFillValues.academic_level || defaultInputs.academic_level,
-      study_hours: parseNumber(
-        whatIfFillValues.study_hours,
-        defaultInputs.study_hours
-      ),
-      self_study_hours: parseNumber(
-        whatIfFillValues.self_study_hours,
-        defaultInputs.self_study_hours
-      ),
-      online_classes_hours: parseNumber(
-        whatIfFillValues.online_classes_hours,
-        defaultInputs.online_classes_hours
-      ),
-      social_media_hours: parseNumber(
-        whatIfFillValues.social_media_hours,
-        defaultInputs.social_media_hours
-      ),
-      gaming_hours: parseNumber(
-        whatIfFillValues.gaming_hours,
-        defaultInputs.gaming_hours
-      ),
-      sleep_hours: parseNumber(
-        whatIfFillValues.sleep_hours,
-        defaultInputs.sleep_hours
-      ),
-      screen_time_hours: parseNumber(
-        whatIfFillValues.screen_time_hours,
-        defaultInputs.screen_time_hours
-      ),
-      exercise_minutes: parseInt(
-        whatIfFillValues.exercise_minutes ?? `${defaultInputs.exercise_minutes}`,
-        10
-      ),
-      caffeine_intake_mg: parseInt(
-        whatIfFillValues.caffeine_intake_mg ??
-          `${defaultInputs.caffeine_intake_mg}`,
-        10
-      ),
-      part_time_job: parseInt(
-        whatIfFillValues.part_time_job ?? `${defaultInputs.part_time_job}`,
-        10
-      ),
-      upcoming_deadline: parseInt(
-        whatIfFillValues.upcoming_deadline ??
-          `${defaultInputs.upcoming_deadline}`,
-        10
-      ),
-      internet_quality:
-        whatIfFillValues.internet_quality || defaultInputs.internet_quality,
-    });
+    setLatestInputs(valuesToBackendInputs(whatIfFillValues));
   }, [whatIfFillValues]);
-
 
   useEffect(() => {
     async function projectPreviewCounterfactual() {
@@ -493,39 +482,17 @@ export default function Dashboard() {
       }
 
       const cf = styledCounterfactuals[activeCfIndex];
-
-      const baseValues =
-        whatIfFillValues ?? inputsToWhatIfValues(latestInputs);
-
-      const updatedValues: Record<string, string> = {
-        ...baseValues,
-      };
+      const baseValues = whatIfFillValues ?? inputsToWhatIfValues(latestInputs);
+      const updatedValues: Record<string, string> = { ...baseValues };
 
       cf.changes.forEach((change) => {
         updatedValues[change.feature] = String(change.suggested_value);
       });
 
-      const inputs: BackendPredictionInput = {
-        age: parseInt(updatedValues.age, 10),
-        gender: updatedValues.gender,
-        academic_level: updatedValues.academic_level,
-        study_hours: Number(updatedValues.study_hours),
-        self_study_hours: Number(updatedValues.self_study_hours),
-        online_classes_hours: Number(updatedValues.online_classes_hours),
-        social_media_hours: Number(updatedValues.social_media_hours),
-        gaming_hours: Number(updatedValues.gaming_hours),
-        sleep_hours: Number(updatedValues.sleep_hours),
-        screen_time_hours: Number(updatedValues.screen_time_hours),
-        exercise_minutes: Number(updatedValues.exercise_minutes),
-        caffeine_intake_mg: Number(updatedValues.caffeine_intake_mg),
-        part_time_job: Number(updatedValues.part_time_job),
-        upcoming_deadline: Number(updatedValues.upcoming_deadline),
-        internet_quality: updatedValues.internet_quality,
-      };
+      const inputs = valuesToBackendInputs(updatedValues);
 
       try {
         const backendTarget = mapUiTargetToBackendTarget(target);
-
         const projected = await fetchStrategyAtlasProjection({
           target: backendTarget,
           inputs,
@@ -553,7 +520,6 @@ export default function Dashboard() {
 
     projectPreviewCounterfactual();
   }, [activeCfIndex, styledCounterfactuals, whatIfFillValues, latestInputs, target]);
-
 
   const data: StudentPoint[] = useMemo(() => {
     if (backendData.length > 0) return backendData;
@@ -691,48 +657,7 @@ export default function Dashboard() {
     try {
       setError(null);
 
-      const inputs: BackendPredictionInput = {
-        age: parseInt(values.age ?? `${defaultInputs.age}`, 10),
-        gender: values.gender || defaultInputs.gender,
-        academic_level: values.academic_level || defaultInputs.academic_level,
-        study_hours: parseNumber(values.study_hours, defaultInputs.study_hours),
-        self_study_hours: parseNumber(
-          values.self_study_hours,
-          defaultInputs.self_study_hours
-        ),
-        online_classes_hours: parseNumber(
-          values.online_classes_hours,
-          defaultInputs.online_classes_hours
-        ),
-        social_media_hours: parseNumber(
-          values.social_media_hours,
-          defaultInputs.social_media_hours
-        ),
-        gaming_hours: parseNumber(values.gaming_hours, defaultInputs.gaming_hours),
-        sleep_hours: parseNumber(values.sleep_hours, defaultInputs.sleep_hours),
-        screen_time_hours: parseNumber(
-          values.screen_time_hours,
-          defaultInputs.screen_time_hours
-        ),
-        exercise_minutes: parseInt(
-          values.exercise_minutes ?? `${defaultInputs.exercise_minutes}`,
-          10
-        ),
-        caffeine_intake_mg: parseInt(
-          values.caffeine_intake_mg ?? `${defaultInputs.caffeine_intake_mg}`,
-          10
-        ),
-        part_time_job: parseInt(
-          values.part_time_job ?? `${defaultInputs.part_time_job}`,
-          10
-        ),
-        upcoming_deadline: parseInt(
-          values.upcoming_deadline ?? `${defaultInputs.upcoming_deadline}`,
-          10
-        ),
-        internet_quality: values.internet_quality || defaultInputs.internet_quality,
-      };
-
+      const inputs = valuesToBackendInputs(values);
       setLatestInputs(inputs);
 
       const backendTarget = mapUiTargetToBackendTarget(target);
@@ -811,10 +736,7 @@ export default function Dashboard() {
   };
 
   const handleApplyCounterfactual = async (option: CounterfactualOption) => {
-    const baseValues =
-      whatIfFillValues ??
-      inputsToWhatIfValues(latestInputs);
-
+    const baseValues = whatIfFillValues ?? inputsToWhatIfValues(latestInputs);
     const updatedValues: Record<string, string> = {
       ...baseValues,
     };
@@ -823,27 +745,9 @@ export default function Dashboard() {
       updatedValues[change.feature] = String(change.suggested_value);
     });
 
-    // 1. Update the form (UI)
     setWhatIfValues(updatedValues);
 
-    // 2. Convert to backend input
-    const inputs: BackendPredictionInput = {
-      age: parseInt(updatedValues.age, 10),
-      gender: updatedValues.gender,
-      academic_level: updatedValues.academic_level,
-      study_hours: Number(updatedValues.study_hours),
-      self_study_hours: Number(updatedValues.self_study_hours),
-      online_classes_hours: Number(updatedValues.online_classes_hours),
-      social_media_hours: Number(updatedValues.social_media_hours),
-      gaming_hours: Number(updatedValues.gaming_hours),
-      sleep_hours: Number(updatedValues.sleep_hours),
-      screen_time_hours: Number(updatedValues.screen_time_hours),
-      exercise_minutes: Number(updatedValues.exercise_minutes),
-      caffeine_intake_mg: Number(updatedValues.caffeine_intake_mg),
-      part_time_job: Number(updatedValues.part_time_job),
-      upcoming_deadline: Number(updatedValues.upcoming_deadline),
-      internet_quality: updatedValues.internet_quality,
-    };
+    const inputs = valuesToBackendInputs(updatedValues);
 
     try {
       const backendTarget = mapUiTargetToBackendTarget(target);
@@ -868,9 +772,7 @@ export default function Dashboard() {
         ...inputs,
       };
 
-      // 3. Move the red point
       setTemporaryWhatIfPoint(newPoint);
-
     } catch (err) {
       setError(
         err instanceof Error
@@ -881,7 +783,6 @@ export default function Dashboard() {
   };
 
   async function handleShowInGraph(values: Record<string, string>) {
-    console.log("Show in graph")
     const existingPoint = data.find((point) =>
       pointMatchesWhatIfValues(point, values)
     );
@@ -894,47 +795,7 @@ export default function Dashboard() {
     try {
       setError(null);
 
-      const inputs: BackendPredictionInput = {
-        age: parseInt(values.age ?? `${defaultInputs.age}`, 10),
-        gender: values.gender || defaultInputs.gender,
-        academic_level: values.academic_level || defaultInputs.academic_level,
-        study_hours: parseNumber(values.study_hours, defaultInputs.study_hours),
-        self_study_hours: parseNumber(
-          values.self_study_hours,
-          defaultInputs.self_study_hours
-        ),
-        online_classes_hours: parseNumber(
-          values.online_classes_hours,
-          defaultInputs.online_classes_hours
-        ),
-        social_media_hours: parseNumber(
-          values.social_media_hours,
-          defaultInputs.social_media_hours
-        ),
-        gaming_hours: parseNumber(values.gaming_hours, defaultInputs.gaming_hours),
-        sleep_hours: parseNumber(values.sleep_hours, defaultInputs.sleep_hours),
-        screen_time_hours: parseNumber(
-          values.screen_time_hours,
-          defaultInputs.screen_time_hours
-        ),
-        exercise_minutes: parseInt(
-          values.exercise_minutes ?? `${defaultInputs.exercise_minutes}`,
-          10
-        ),
-        caffeine_intake_mg: parseInt(
-          values.caffeine_intake_mg ?? `${defaultInputs.caffeine_intake_mg}`,
-          10
-        ),
-        part_time_job: parseInt(
-          values.part_time_job ?? `${defaultInputs.part_time_job}`,
-          10
-        ),
-        upcoming_deadline: parseInt(
-          values.upcoming_deadline ?? `${defaultInputs.upcoming_deadline}`,
-          10
-        ),
-        internet_quality: values.internet_quality || defaultInputs.internet_quality,
-      };
+      const inputs = valuesToBackendInputs(values);
 
       const backendTarget = mapUiTargetToBackendTarget(target);
       const projected = await fetchStrategyAtlasProjection({
@@ -1198,6 +1059,7 @@ export default function Dashboard() {
   );
 }
 
+/** Map UI dropdown target values to backend API target names. */
 function mapUiTargetToBackendTarget(target: string): Target {
   switch (target) {
     case "productivity":
@@ -1221,7 +1083,7 @@ function parseNumber(value: string | undefined, fallback: number) {
 
 function formatPredictionLabel(
   pred: PredictionResponse | null,
-  target: string,
+  _target: string,
   fallbackValue?: number
 ) {
   if (!pred) return "-";
@@ -1237,27 +1099,6 @@ function formatPredictionLabel(
   }
 
   return "-";
-}
-
-function getTargetGoalLabel(target: string, value: number) {
-  if (
-    target === "productivity" ||
-    target === "exam" ||
-    target === "mental_health" ||
-    target === "focus"
-  ) {
-    if (value >= 75) return "HIGH";
-    if (value >= 45) return "MEDIUM";
-    return "LOW";
-  }
-
-  if (value < 33) return "LOW";
-  if (value < 66) return "MEDIUM";
-  return "HIGH";
-}
-
-function prettyFeatureName(name: string) {
-  return name.replaceAll("_", " ");
 }
 
 function getUiTargetLabel(target: string) {
@@ -1353,34 +1194,6 @@ function pointMatchesWhatIfValues(
   }
 
   return true;
-}
-
-function computeTemporaryStrategyAtlasPosition(values: Record<string, string>) {
-  const study_hours = Number(values.study_hours);
-  const self_study_hours = Number(values.self_study_hours);
-  const social_media_hours = Number(values.social_media_hours);
-  const gaming_hours = Number(values.gaming_hours);
-  const sleep_hours = Number(values.sleep_hours);
-  const screen_time_hours = Number(values.screen_time_hours);
-  const exercise_minutes = Number(values.exercise_minutes);
-
-  const focus_index = 70;
-  const burnout_level = 50;
-
-  const x =
-    study_hours * 0.8 +
-    self_study_hours * 0.4 +
-    focus_index * 0.03 -
-    burnout_level * 0.02;
-
-  const y =
-    sleep_hours * 0.9 -
-    social_media_hours * 0.35 -
-    gaming_hours * 0.2 -
-    screen_time_hours * 0.1 +
-    exercise_minutes * 0.01;
-
-  return { x, y };
 }
 
 function inputsToWhatIfValues(

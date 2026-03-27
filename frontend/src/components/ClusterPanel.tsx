@@ -1,5 +1,5 @@
 import type { ClusterSummaryResponse } from "../api/types";
-import type { StudentPoint } from "../Dashboard";
+import type { StudentPoint } from "../Dashboard_old.tsx";
 
 type SelectionState =
   | { type: "none" }
@@ -12,7 +12,19 @@ type Props = {
   clusterSummary?: ClusterSummaryResponse | null;
 };
 
-const featureConfig = [
+type FeatureConfigItem = {
+  key: keyof StudentPoint;
+  label: string;
+  unit?: string;
+  categorical?: boolean;
+};
+
+type DisplayRow = {
+  label: string;
+  value: string;
+};
+
+const featureConfig: readonly FeatureConfigItem[] = [
   { key: "age", label: "Age" },
   { key: "gender", label: "Gender", categorical: true },
   { key: "academic_level", label: "Academic level", categorical: true },
@@ -30,25 +42,38 @@ const featureConfig = [
   { key: "internet_quality", label: "Internet quality", categorical: true },
 ] as const;
 
-function average(points: StudentPoint[], key: keyof StudentPoint) {
+/** Average a numeric field across a set of student points. */
+function average(points: StudentPoint[], key: keyof StudentPoint): number {
   const values = points
     .map((p) => p[key])
-    .filter((v) => typeof v === "number") as number[];
+    .filter((v): v is number => typeof v === "number");
 
   if (values.length === 0) return 0;
-  return values.reduce((sum, v) => sum + v, 0) / values.length;
+  return values.reduce((sum, value) => sum + value, 0) / values.length;
 }
 
-function formatValue(value: unknown, unit?: string) {
+/** Format a displayed value with optional unit. */
+function formatValue(value: unknown, unit?: string): string {
   if (typeof value === "number") {
     return unit ? `${value.toFixed(1)} ${unit}` : value.toFixed(2);
   }
   return String(value);
 }
 
-function formatDifference(diff: number, unit?: string) {
+/** Format a signed difference for comparison rows. */
+function formatDifference(diff: number, unit?: string): string {
   const sign = diff > 0 ? "+" : "";
   return unit ? `${sign}${diff.toFixed(1)} ${unit}` : `${sign}${diff.toFixed(2)}`;
+}
+
+/** Render label/value rows in the shared two-column layout. */
+function renderRows(rows: DisplayRow[]) {
+  return rows.flatMap((row) => [
+    <div key={`${row.label}-label`}>{row.label}:</div>,
+    <div key={`${row.label}-value`} className="value-right">
+      {row.value}
+    </div>,
+  ]);
 }
 
 export default function ClusterPanel({
@@ -65,7 +90,10 @@ export default function ClusterPanel({
 
   const showComparison = selection.type !== "none";
 
-  const profileRows =
+  const profileRows: DisplayRow =
+    null as never;
+
+  const resolvedProfileRows: DisplayRow[] =
     selection.type === "point"
       ? [
           { label: "Student ID", value: selection.point.id },
@@ -89,13 +117,10 @@ export default function ClusterPanel({
             label: "Focus index",
             value: selection.point.focus_index.toFixed(2),
           },
-          ...featureConfig.map(({ key, label, unit }) => {
-            const value = selection.point[key as keyof StudentPoint];
-            return {
-              label,
-              value: formatValue(value, unit),
-            };
-          }),
+          ...featureConfig.map(({ key, label, unit }) => ({
+            label,
+            value: formatValue(selection.point[key], unit),
+          })),
         ]
       : [
           {
@@ -119,26 +144,23 @@ export default function ClusterPanel({
             value: average(profilePoints, "focus_index").toFixed(2),
           },
           ...featureConfig
-              .filter((f) => !f.categorical)
-              .map(({ key, label, unit }) => {
-            return {
+            .filter((feature) => !feature.categorical)
+            .map(({ key, label, unit }) => ({
               label: `Average ${label.toLowerCase()}`,
-              value: formatValue(
-                average(profilePoints, key as keyof StudentPoint),
-                unit
-              ),
-            };
-          }),
+              value: formatValue(average(profilePoints, key), unit),
+            })),
         ];
 
   const restPoints =
     selection.type === "point"
-      ? allData.filter((p) => p.id !== selection.point.id)
+      ? allData.filter((point) => point.id !== selection.point.id)
       : selection.type === "cluster"
-      ? allData.filter((p) => !selection.points.some((sp) => sp.id === p.id))
+      ? allData.filter(
+          (point) => !selection.points.some((selected) => selected.id === point.id)
+        )
       : [];
 
-  const comparisonRows =
+  const comparisonRows: DisplayRow[] =
     selection.type === "none"
       ? []
       : [
@@ -178,66 +200,44 @@ export default function ClusterPanel({
             ),
           },
           ...featureConfig
-          .filter((f) => !f.categorical)
-          .map(({ key, label, unit }) => {
-            const diff =
-              average(profilePoints, key as keyof StudentPoint) -
-              average(restPoints, key as keyof StudentPoint);
-
-            return {
+            .filter((feature) => !feature.categorical)
+            .map(({ key, label, unit }) => ({
               label,
-              value: formatDifference(diff, unit),
-            };
-          }),
+              value: formatDifference(
+                average(profilePoints, key) - average(restPoints, key),
+                unit
+              ),
+            })),
         ];
 
   const comparisonTitle =
     selection.type === "point" ? "Student vs Rest" : "Cluster vs Rest";
 
   return (
-      <div className="cluster-panel-content">
-        <section className="analysis-section-block">
+    <div className="cluster-panel-content">
+      <section className="analysis-section-block">
+        <div className="middle-section">
+          <div className="middle-section-title">Profile overview</div>
+          <div className="middle-values-box">
+            <div className="two-col-list">{renderRows(resolvedProfileRows)}</div>
+          </div>
+        </div>
+
+        {showComparison && (
           <div className="middle-section">
-            <div className="middle-section-title">Profile overview</div>
+            <div className="middle-section-title">{comparisonTitle}</div>
             <div className="middle-values-box">
               <div className="two-col-list">
-                {profileRows.flatMap((row) => [
-                  <div key={`${row.label}-label`}>{row.label}:</div>,
-                  <div key={`${row.label}-value`} className="value-right">
-                    {row.value}
-                  </div>,
-                ])}
+                {selection.type === "cluster" && clusterSummary
+                  ? renderRows(comparisonRows)
+                  : comparisonRows.length > 0
+                  ? renderRows(comparisonRows)
+                  : null}
               </div>
             </div>
           </div>
-
-          {showComparison && (
-            <div className="middle-section">
-              <div className="middle-section-title">{comparisonTitle}</div>
-              <div className="middle-values-box">
-                <div className="two-col-list">
-                  {selection.type === "cluster" && clusterSummary ? (
-                    <>
-                      {comparisonRows.flatMap((row) => [
-                        <div key={`${row.label}-label`}>{row.label}:</div>,
-                        <div key={`${row.label}-value`} className="value-right">
-                          {row.value}
-                        </div>,
-                      ])}
-                    </>
-                  ) : comparisonRows.length > 0 ? (
-                    comparisonRows.flatMap((row) => [
-                      <div key={`${row.label}-label`}>{row.label}:</div>,
-                      <div key={`${row.label}-value`} className="value-right">
-                        {row.value}
-                      </div>,
-                    ])
-                  ) : null}
-                </div>
-              </div>
-            </div>
-          )}
-        </section>
-      </div>
-    );
+        )}
+      </section>
+    </div>
+  );
 }

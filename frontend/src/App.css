@@ -21,7 +21,14 @@ body,
   margin: 0;
   width: 100%;
   height: 100%;
-  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-family:
+    Inter,
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    sans-serif;
   background: var(--bg);
   color: var(--text);
 }
@@ -38,6 +45,7 @@ body {
 }
 
 /* Generic content */
+
 .panel-content {
   height: 100%;
   padding: 18px;
@@ -53,6 +61,7 @@ body {
 }
 
 /* Generic card */
+
 .info-card {
   background: var(--panel-soft);
   border: 1px solid var(--border);
@@ -88,6 +97,7 @@ body {
 }
 
 /* Forms */
+
 select,
 input,
 textarea {
@@ -99,7 +109,9 @@ textarea {
   font-size: 0.95rem;
   color: var(--text);
   outline: none;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
 }
 
 select:focus,
@@ -119,7 +131,9 @@ textarea:focus {
   color: white;
   background: var(--accent);
   cursor: pointer;
-  transition: background 0.15s ease, transform 0.08s ease;
+  transition:
+    background 0.15s ease,
+    transform 0.08s ease;
 }
 
 .full-width-btn:hover {
@@ -131,6 +145,7 @@ textarea:focus {
 }
 
 /* Header */
+
 .header {
   flex: 0 0 50px;
   display: flex;
@@ -176,6 +191,7 @@ textarea:focus {
 }
 
 /* Main layout */
+
 .dashboard-grid {
   flex: 1;
   min-height: 0;
@@ -200,6 +216,7 @@ textarea:focus {
 }
 
 /* Column shell */
+
 .column-shell {
   display: flex;
   flex-direction: column;
@@ -228,7 +245,8 @@ textarea:focus {
   overflow: hidden;
 }
 
-/* UMAP */
+/* Strategy Atlas / UMAP */
+
 .umap-panel {
   display: flex;
   flex-direction: column;
@@ -251,15 +269,11 @@ textarea:focus {
   color: #222;
 }
 
-.umap-plot-wrap {
-  flex: 1;
-  min-height: 0;
-  overflow: hidden;
-}
-
+.umap-plot-wrap,
 .umap-content {
   flex: 1;
   min-height: 0;
+  overflow: hidden;
 }
 
 .umap-controls {
@@ -270,7 +284,6 @@ textarea:focus {
   box-sizing: border-box;
 }
 
-/* Label */
 .umap-controls-label {
   font-size: 18px;
   font-weight: 500;
@@ -278,13 +291,11 @@ textarea:focus {
   white-space: nowrap;
 }
 
-/* Select wrapper */
 .umap-select-wrap {
   position: relative;
   width: 220px;
 }
 
-/* Dropdown */
 .umap-select {
   width: 100%;
   height: 44px;
@@ -295,14 +306,12 @@ textarea:focus {
   font-size: 15px;
   font-weight: 500;
   color: #333;
-
   appearance: none;
   -webkit-appearance: none;
   -moz-appearance: none;
   outline: none;
 }
 
-/* Arrow */
 .umap-select-arrow {
   position: absolute;
   right: 12px;
@@ -313,7 +322,6 @@ textarea:focus {
   pointer-events: none;
 }
 
-/* Button */
 .umap-clear-btn {
   height: 44px;
   padding: 0 18px;
@@ -328,6 +336,7 @@ textarea:focus {
 }
 
 /* Middle column layout */
+
 .middle-panel {
   height: 100%;
   min-height: 0;
@@ -336,52 +345,39 @@ textarea:focus {
 }
 
 .middle-column-body {
-  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  height: 100%;
   min-height: 0;
-  display: grid;
-  grid-template-rows: auto 1fr;
-  gap: 6px;
-  overflow: hidden;
+}
+
+.middle-column-body .subcolumn-shell {
+  flex: 1 1 0;
+  min-height: 0;
+}
+
+.middle-column-body--three .subcolumn-shell {
+  flex: 0 0 calc((100% - 24px) / 3);
 }
 
 .middle-analysis-wrapper,
-.middle-feature-wrapper {
+.middle-feature-wrapper,
+.subcolumn-shell,
+.middle-section {
   min-height: 0;
   display: flex;
   flex-direction: column;
   overflow: hidden;
-}
-
-.subcolumn-shell {
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
 }
 
 .subcolumn-body {
   flex: 1;
   min-height: 0;
-  /*border: 3px solid #173242;*/
-  background: #d3d3d3;
   overflow: hidden;
-}
-
-/* Cluster panel */
-.cluster-panel-content {
-  height: 100%;
-  box-sizing: border-box;
-}
-
-.analysis-section-block {
-
-  display: flex;
-  flex-direction: column;
-}
-
-.middle-section {
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
+  border: 3px solid #173242;
+  background: #d3d3d3;
+  padding: 12px;
 }
 
 .middle-section + .middle-section {
@@ -396,57 +392,16 @@ textarea:focus {
   line-height: 1.1;
 }
 
+/* Cluster panel */
 
-.model-strategies-label-with-info {
+.cluster-panel-content {
+  height: 100%;
+  box-sizing: border-box;
+}
+
+.analysis-section-block {
   display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.info-tooltip-wrap {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.info-icon {
-  width: 17px;
-  height: 17px;
-  border-radius: 50%;
-  background: #b0b0b0;
-  color: white;
-  font-size: 11px;
-  font-weight: 700;
-  line-height: 17px;
-  text-align: center;
-  cursor: default;
-  user-select: none;
-}
-
-.info-tooltip {
-  position: absolute;
-  bottom: 130%;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 220px;
-  padding: 8px 10px;
-  border-radius: 8px;
-  background: rgba(40, 40, 40, 0.95);
-  color: white;
-  font-size: 12px;
-  font-weight: 500;
-  line-height: 1.35;
-  text-align: left;
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 0.15s ease;
-  z-index: 20;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
-}
-
-.info-tooltip-wrap:hover .info-tooltip {
-  opacity: 1;
+  flex-direction: column;
 }
 
 .middle-values-box {
@@ -471,6 +426,7 @@ textarea:focus {
 }
 
 /* Feature importance */
+
 .feature-panel-content {
   height: 100%;
   min-height: 0;
@@ -522,7 +478,6 @@ textarea:focus {
   padding-top: 8px;
 }
 
-/* Toggle */
 .toggle-row {
   display: flex;
   align-items: center;
@@ -550,6 +505,7 @@ textarea:focus {
 }
 
 /* Counterfactual panel */
+
 .counterfactual-panel {
   display: flex;
   flex-direction: column;
@@ -667,21 +623,12 @@ textarea:focus {
 }
 
 .cf-root {
-  width: 100%;
-  height: 100%;
-  background: #d9d9d9;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-
-.cf-root {
   display: flex;
   flex-direction: column;
   height: 100%;
   background: #d9d9d9;
-  /*border: 2px solid #16313d;*/
   box-sizing: border-box;
+  overflow: hidden;
 }
 
 .cf-top-tabs {
@@ -698,21 +645,17 @@ textarea:focus {
   height: 32px;
   padding: 0 18px;
   margin-right: 8px;
-
   display: flex;
   align-items: center;
   justify-content: center;
-
   border: 2px solid #8a8a8a;
   border-bottom: none;
   border-radius: 0;
-
   background: #efefef;
   color: #6f6f6f;
   font-size: 13px;
   font-weight: 800;
   line-height: 1;
-
   cursor: pointer;
   box-shadow: none;
   outline: none;
@@ -730,16 +673,10 @@ textarea:focus {
 .whatif-view,
 .counterfactuals-view {
   flex: 1;
-  padding: 18px 14px 14px 14px;
-  background: #d9d9d9;
-  overflow: auto;
-}
-
-.whatif-view,
-.counterfactuals-view {
-  padding: 14px 12px 10px 14px;
-  overflow-y: auto;
   height: 100%;
+  padding: 14px 12px 10px 14px;
+  background: #d9d9d9;
+  overflow-y: auto;
   box-sizing: border-box;
 }
 
@@ -1004,7 +941,8 @@ textarea:focus {
   min-width: 0;
 }
 
-.cf-meta-label, .cf-meta-value {
+.cf-meta-label,
+.cf-meta-value {
   font-weight: 400;
   min-width: 0;
 }
@@ -1031,6 +969,60 @@ textarea:focus {
 
 .suggest-button {
   margin-bottom: 10px;
+}
+
+/* Model strategies */
+
+.model-strategies-label-with-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.info-tooltip-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.info-icon {
+  width: 17px;
+  height: 17px;
+  border-radius: 50%;
+  background: #b0b0b0;
+  color: white;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 17px;
+  text-align: center;
+  cursor: default;
+  user-select: none;
+}
+
+.info-tooltip {
+  position: absolute;
+  bottom: 130%;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 220px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgba(40, 40, 40, 0.95);
+  color: white;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.35;
+  text-align: left;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s ease;
+  z-index: 20;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+}
+
+.info-tooltip-wrap:hover .info-tooltip {
+  opacity: 1;
 }
 
 .model-strategies-panel {
@@ -1107,66 +1099,6 @@ textarea:focus {
 }
 
 .model-strategies-card {
-  background: #f3f3f3;
-  border-radius: 14px;
-  padding: 24px 28px;
-  display: grid;
-  /*grid-template-columns: 1fr auto;*/
-  row-gap: 14px;
-  column-gap: 22px;
-  width: 100%;
-  box-sizing: border-box;
-}
-
-.model-strategies-label {
-  font-size: 14px;
-  font-weight: 500;
-  color: #3c3c3c;
-  line-height: 1.2;
-}
-
-.model-strategies-value {
-  font-size: 14px;
-  font-weight: 500;
-  color: #3c3c3c;
-  line-height: 1.2;
-  text-align: right;
-}
-
-.model-strategies-empty {
-  background: #f3f3f3;
-  border-radius: 14px;
-  padding: 22px;
-  font-size: 16px;
-  color: #666;
-}
-
-.middle-column-body {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  height: 100%;
-  min-height: 0;
-}
-
-.middle-column-body .subcolumn-shell {
-  flex: 1 1 0;
-  min-height: 0;
-}
-
-.middle-column-body--three .subcolumn-shell {
-  flex: 0 0 calc((100% - 24px) / 3);
-}
-
-.middle-column-body .subcolumn-body {
-  min-height: 0;
-  overflow: hidden;
-  border: 3px solid #173242;
-  background: #d3d3d3;
-  padding: 12px;
-}
-
-.model-strategies-card {
   background: #e5e5e5;
   border-radius: 12px;
   padding: 0;
@@ -1197,6 +1129,6 @@ textarea:focus {
 .model-strategies-value {
   font-weight: 700;
   color: #333;
-  text-align: right;     /* KEY */
-  justify-self: end;     /* KEY */
+  text-align: right;
+  justify-self: end;
 }

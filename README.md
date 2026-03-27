@@ -110,7 +110,7 @@ This project aims to make these differences visible and understandable through a
 │   │   ├── api/
 │   │   ├── components/
 │   │   ├── App.tsx
-│   │   ├── Dashboard.tsx
+│   │   ├── Dashboard_old.tsx
 │   │   └── ...
 │   ├── package.json
 │   └── ...

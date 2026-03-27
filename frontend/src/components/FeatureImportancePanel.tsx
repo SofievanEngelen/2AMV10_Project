@@ -2,7 +2,7 @@ import PlotModule from "react-plotly.js";
 const Plot = (PlotModule as any).default ?? PlotModule;
 
 import type { FeatureImportanceItem } from "../api/types";
-import type { StudentPoint } from "../Dashboard";
+import type { StudentPoint } from "../Dashboard_old.tsx";
 
 type SelectionState =
   | { type: "none" }
@@ -16,12 +16,18 @@ type Props = {
   compact?: boolean;
 };
 
+/** Build a map from feature → importance values. */
+function buildMap(entries: Record<string, number>) {
+  return Object.fromEntries(Object.entries(entries));
+}
+
 export default function FeatureImportancePanel({
   selection,
   items = [],
   localItems = null,
   compact = false,
 }: Props) {
+  // Fallback values when backend data is unavailable
   const fallbackNames =
     selection.type === "point"
       ? [
@@ -49,6 +55,7 @@ export default function FeatureImportancePanel({
       ? [0.19, 0.17, 0.15, 0.12, 0.1, 0.08, 0.07]
       : [0.2, 0.18, 0.16, 0.14, 0.11, 0.09, 0.075, 0.06];
 
+  // Global importance map
   const globalMap =
     items.length > 0
       ? Object.fromEntries(items.map((d) => [d.feature, d.importance]))
@@ -56,6 +63,7 @@ export default function FeatureImportancePanel({
           fallbackNames.map((name, i) => [name, fallbackValues[i] ?? 0])
         );
 
+  // Local importance map (absolute values for comparison)
   const hasLocal =
     selection.type !== "none" &&
     localItems != null &&
@@ -67,10 +75,12 @@ export default function FeatureImportancePanel({
       )
     : {};
 
+  // Combine feature names
   const featureNames = hasLocal
     ? Array.from(new Set([...Object.keys(globalMap), ...Object.keys(localMap)]))
     : Object.keys(globalMap);
 
+  // Sort features
   const sortedFeatureNames = [...featureNames].sort((a, b) => {
     if (hasLocal) {
       return (localMap[b] ?? 0) - (localMap[a] ?? 0);
@@ -78,22 +88,25 @@ export default function FeatureImportancePanel({
     return (globalMap[b] ?? 0) - (globalMap[a] ?? 0);
   });
 
+  // Extract values
   const globalValues = sortedFeatureNames.map((name) => globalMap[name] ?? 0);
   const localValues = sortedFeatureNames.map((name) => localMap[name] ?? 0);
 
+  // Dynamic sizing
   const ROW_HEIGHT = hasLocal ? (compact ? 22 : 26) : compact ? 16 : 20;
   const MIN_HEIGHT = compact ? 170 : 220;
-  const chartHeight = Math.max(MIN_HEIGHT, sortedFeatureNames.length * ROW_HEIGHT);
+  const chartHeight = Math.max(
+    MIN_HEIGHT,
+    sortedFeatureNames.length * ROW_HEIGHT
+  );
 
-  const maxValue = Math.max(
-    0.01,
-    ...globalValues,
-    ...(hasLocal ? localValues : [0])
-  ) * 1.1;
+  const maxValue =
+    Math.max(0.01, ...globalValues, ...(hasLocal ? localValues : [0])) * 1.1;
 
   const rowHeight = chartHeight / Math.max(sortedFeatureNames.length, 1);
   const fontSize = Math.max(8, Math.min(10, rowHeight * 0.5));
 
+  // Plot traces
   const traces = hasLocal
     ? [
         {
@@ -133,8 +146,12 @@ export default function FeatureImportancePanel({
     <div className="feature-panel-content">
       <div className="feature-block">
         <div className="feature-plot-shell">
+          {/* Main chart */}
           <div className="feature-chart-scroll">
-            <div className="feature-chart-inner" style={{ height: chartHeight }}>
+            <div
+              className="feature-chart-inner"
+              style={{ height: chartHeight }}
+            >
               <Plot
                 data={traces}
                 layout={{
@@ -152,9 +169,7 @@ export default function FeatureImportancePanel({
                   yaxis: {
                     automargin: true,
                     autorange: "reversed",
-                    tickfont: {
-                      size: fontSize,
-                    },
+                    tickfont: { size: fontSize },
                   },
                   paper_bgcolor: "#efefef",
                   plot_bgcolor: "#efefef",
@@ -180,6 +195,7 @@ export default function FeatureImportancePanel({
             </div>
           </div>
 
+          {/* Fixed x-axis */}
           <div className="feature-axis-fixed">
             <Plot
               data={[

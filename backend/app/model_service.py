@@ -1,15 +1,13 @@
-import copy
 import json
+import threading
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 import dice_ml
+import keras
 import lime.lime_tabular
 import numpy as np
 import pandas as pd
-import umap
-import keras
-
 from dice_ml import Dice
 from sklearn.cluster import KMeans
 from sklearn.compose import ColumnTransformer
@@ -18,13 +16,12 @@ from sklearn.model_selection import train_test_split
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import LabelEncoder, OneHotEncoder, StandardScaler
 from umap.parametric_umap import ParametricUMAP
-from joblib import Parallel, delayed
 
-import threading
-
-_strategy_cache: Dict[str, Dict] = {}
+_strategy_cache: Dict[str, Dict[str, Any]] = {}
 _strategy_locks: Dict[str, threading.Lock] = {}
-_precomputed_strategy_cache: Dict[str, Dict] = {}
+_precomputed_strategy_cache: Dict[str, Dict[str, Any]] = {}
+_model_cache: Dict[str, Dict[str, Any]] = {}
+_lime_cache: Dict[str, Dict[str, Any]] = {}
 
 SUPPORTED_TARGETS = [
     "burnout_level",
@@ -53,27 +50,31 @@ BASE_CONTINUOUS_FEATURES = [
     "exam_score",
 ]
 
-_model_cache: Dict[str, Dict] = {}
-_lime_cache: Dict[str, Dict] = {}
-
 BASE_DIR = Path(__file__).resolve().parent.parent
 STRATEGY_ATLAS_DIR = BASE_DIR / "data" / "StrategyAtlas"
 
 
 def _validate_target(target: str) -> None:
+    """Ensure the requested prediction target is supported."""
     if target not in SUPPORTED_TARGETS:
         raise ValueError(f"Unsupported target: {target}")
 
 
 def _category_name(target: str) -> str:
+    """Return the derived categorical target column name."""
     return f"{target}_category"
 
 
 def _map_class_to_level(pred_class: int) -> str:
+    """Map model class indices to user-facing labels."""
     return {0: "Low", 1: "Medium", 2: "High"}[int(pred_class)]
 
 
 def _prepare_training_df(df: pd.DataFrame, target: str) -> pd.DataFrame:
+    """
+    Prepare a training dataframe by adding a categorical target column
+    if it does not already exist.
+    """
     _validate_target(target)
 
     out = df.copy()
@@ -91,8 +92,16 @@ def _prepare_training_df(df: pd.DataFrame, target: str) -> pd.DataFrame:
     return out
 
 
-def _build_complete_input_df(payload: Dict, model_features: List[str], df: pd.DataFrame) -> pd.DataFrame:
-    row = {}
+def _build_complete_input_df(
+    payload: Dict[str, Any],
+    model_features: List[str],
+    df: pd.DataFrame,
+) -> pd.DataFrame:
+    """
+    Build a single-row input dataframe for inference, filling any missing
+    values with sensible defaults from the dataset.
+    """
+    row: Dict[str, Any] = {}
 
     for col in model_features:
         if col in payload and payload[col] is not None:
@@ -108,27 +117,24 @@ def _build_complete_input_df(payload: Dict, model_features: List[str], df: pd.Da
     return pd.DataFrame([row], columns=model_features)
 
 
-def _get_feature_config(df: pd.DataFrame, target: str) -> Dict:
+def _get_feature_config(df: pd.DataFrame, target: str) -> Dict[str, List[str] | str]:
+    """Return feature groups used across model training and explanations."""
     category_col = _category_name(target)
 
     all_feature_candidates = [
-        c for c in df.columns
-        if c not in [target, category_col, "student_id"]
+        c for c in df.columns if c not in [target, category_col, "student_id"]
     ]
 
     actionable_features = [
-        c for c in all_feature_candidates
-        if c not in IMMUTABLE_FEATURES
+        c for c in all_feature_candidates if c not in IMMUTABLE_FEATURES
     ]
 
     continuous_features = [
-        c for c in BASE_CONTINUOUS_FEATURES
-        if c in actionable_features
+        c for c in BASE_CONTINUOUS_FEATURES if c in actionable_features
     ]
 
     categorical_features = [
-        c for c in actionable_features
-        if c not in continuous_features
+        c for c in actionable_features if c not in continuous_features
     ]
 
     model_features = actionable_features + IMMUTABLE_FEATURES
@@ -142,7 +148,8 @@ def _get_feature_config(df: pd.DataFrame, target: str) -> Dict:
     }
 
 
-def _safe_item(value):
+def _safe_item(value: Any) -> Any:
+    """Convert NumPy scalar values to native Python values where possible."""
     return value.item() if hasattr(value, "item") else value
 
 
@@ -151,6 +158,10 @@ def _aggregate_pipeline_importances(
     importances: np.ndarray,
     original_features: List[str],
 ) -> List[dict]:
+    """
+    Aggregate one-hot encoded and transformed feature importances back to
+    their original feature names.
+    """
     feature_to_importance = {f: 0.0 for f in original_features}
 
     for name, importance in zip(transformed_feature_names, importances):
@@ -183,7 +194,8 @@ def _aggregate_pipeline_importances(
     ]
 
 
-def _get_model_bundle(df: pd.DataFrame, target: str) -> Dict:
+def _get_model_bundle(df: pd.DataFrame, target: str) -> Dict[str, Any]:
+    """Train and cache the prediction + DiCE model bundle for a target."""
     _validate_target(target)
 
     if target in _model_cache:
@@ -202,22 +214,29 @@ def _get_model_bundle(df: pd.DataFrame, target: str) -> Dict:
         random_state=42,
     )
 
-    preprocessor = ColumnTransformer([
-        ("num", StandardScaler(), cfg["continuous_features"]),
-        (
-            "cat",
-            OneHotEncoder(handle_unknown="ignore", sparse_output=False),
-            cfg["categorical_features"],
-        ),
-    ])
+    preprocessor = ColumnTransformer(
+        [
+            ("num", StandardScaler(), cfg["continuous_features"]),
+            (
+                "cat",
+                OneHotEncoder(handle_unknown="ignore", sparse_output=False),
+                cfg["categorical_features"],
+            ),
+        ]
+    )
 
-    model_pipeline = Pipeline([
-        ("preprocessor", preprocessor),
-        ("classifier", RandomForestClassifier(
-            n_estimators=100,
-            random_state=42,
-        )),
-    ])
+    model_pipeline = Pipeline(
+        [
+            ("preprocessor", preprocessor),
+            (
+                "classifier",
+                RandomForestClassifier(
+                    n_estimators=100,
+                    random_state=42,
+                ),
+            ),
+        ]
+    )
 
     model_pipeline.fit(X_train, y_train)
 
@@ -226,17 +245,17 @@ def _get_model_bundle(df: pd.DataFrame, target: str) -> Dict:
         axis=1,
     )
 
-    d = dice_ml.Data(
+    data_interface = dice_ml.Data(
         dataframe=train_data,
         continuous_features=cfg["continuous_features"],
         outcome_name=cfg["category_col"],
     )
-    m = dice_ml.Model(
+    model_interface = dice_ml.Model(
         model=model_pipeline,
         backend="sklearn",
         model_type="classifier",
     )
-    exp = Dice(d, m, method="genetic")
+    dice_explainer = Dice(data_interface, model_interface, method="genetic")
 
     bundle = {
         "target": target,
@@ -246,7 +265,7 @@ def _get_model_bundle(df: pd.DataFrame, target: str) -> Dict:
         "continuous_features": cfg["continuous_features"],
         "categorical_features": cfg["categorical_features"],
         "model_pipeline": model_pipeline,
-        "dice": exp,
+        "dice": dice_explainer,
         "X_train": X_train,
         "X_test": X_test,
         "y_train": y_train,
@@ -257,7 +276,8 @@ def _get_model_bundle(df: pd.DataFrame, target: str) -> Dict:
     return bundle
 
 
-def _get_lime_bundle(df: pd.DataFrame, target: str) -> Dict:
+def _get_lime_bundle(df: pd.DataFrame, target: str) -> Dict[str, Any]:
+    """Train and cache the LIME explanation bundle for a target."""
     _validate_target(target)
 
     cache_key = f"lime_{target}"
@@ -314,7 +334,11 @@ def _get_lime_bundle(df: pd.DataFrame, target: str) -> Dict:
     return bundle
 
 
-def _encode_for_lime(input_df: pd.DataFrame, label_encoders: Dict[str, LabelEncoder]) -> pd.DataFrame:
+def _encode_for_lime(
+    input_df: pd.DataFrame,
+    label_encoders: Dict[str, LabelEncoder],
+) -> pd.DataFrame:
+    """Encode a single-row or multi-row dataframe using cached label encoders."""
     out = input_df.copy()
 
     for col, le in label_encoders.items():
@@ -335,18 +359,23 @@ def _encode_for_lime(input_df: pd.DataFrame, label_encoders: Dict[str, LabelEnco
 
 def _lime_vector_for_instance(
     input_array: np.ndarray,
-    model,
-    explainer,
+    model: Any,
+    explainer: Any,
     feature_names: List[str],
     num_features: int,
     num_samples: int | None = None,
 ) -> np.ndarray:
+    """
+    Generate a normalized LIME contribution vector for a single encoded instance.
+    """
     input_df = pd.DataFrame([input_array], columns=feature_names)
     pred = int(model.predict(input_df)[0])
 
     explain_kwargs = {
         "data_row": input_array,
-        "predict_fn": lambda x: model.predict_proba(pd.DataFrame(x, columns=feature_names)),
+        "predict_fn": lambda x: model.predict_proba(
+            pd.DataFrame(x, columns=feature_names)
+        ),
         "num_features": num_features,
         "labels": (pred,),
     }
@@ -371,6 +400,7 @@ def _encode_dataframe_for_lime(
     df_in: pd.DataFrame,
     label_encoders: Dict[str, LabelEncoder],
 ) -> pd.DataFrame:
+    """Encode an entire dataframe using cached label encoders."""
     out = df_in.copy()
     for col, le in label_encoders.items():
         out[col] = out[col].astype(str).map(
@@ -379,7 +409,15 @@ def _encode_dataframe_for_lime(
     return out
 
 
-def _normalize_payload_values(payload: Dict, model_features: List[str], df: pd.DataFrame) -> Dict:
+def _normalize_payload_values(
+    payload: Dict[str, Any],
+    model_features: List[str],
+    df: pd.DataFrame,
+) -> Dict[str, Any]:
+    """
+    Normalize categorical payload values to match dataset categories,
+    while preserving numeric values as-is.
+    """
     normalized = dict(payload)
 
     for col in model_features:
@@ -406,40 +444,44 @@ def _normalize_payload_values(payload: Dict, model_features: List[str], df: pd.D
 
 
 def _normalize_precomputed_points(raw_points: List[dict], target: str) -> List[dict]:
+    """Normalize saved Strategy Atlas point records into the expected schema."""
     points: List[dict] = []
 
     for i, p in enumerate(raw_points):
-        points.append({
-            "id": int(p.get("id", p.get("student_id", i))),
-            "x": float(p["x"]),
-            "y": float(p["y"]),
-            "cluster": int(p.get("cluster", p.get("strategy_label", -1))),
-            "burnout_level": float(p.get("burnout_level", 0.0)),
-            "productivity_score": float(p.get("productivity_score", 0.0)),
-            "exam_score": float(p.get("exam_score", 0.0)),
-            "mental_health_score": float(p.get("mental_health_score", 0.0)),
-            "focus_index": float(p.get("focus_index", 0.0)),
-            "age": int(p.get("age", 0)),
-            "gender": str(p.get("gender", "")),
-            "academic_level": str(p.get("academic_level", "")),
-            "study_hours": float(p.get("study_hours", 0.0)),
-            "self_study_hours": float(p.get("self_study_hours", 0.0)),
-            "online_classes_hours": float(p.get("online_classes_hours", 0.0)),
-            "social_media_hours": float(p.get("social_media_hours", 0.0)),
-            "gaming_hours": float(p.get("gaming_hours", 0.0)),
-            "sleep_hours": float(p.get("sleep_hours", 0.0)),
-            "screen_time_hours": float(p.get("screen_time_hours", 0.0)),
-            "exercise_minutes": float(p.get("exercise_minutes", 0.0)),
-            "caffeine_intake_mg": float(p.get("caffeine_intake_mg", 0.0)),
-            "part_time_job": int(p.get("part_time_job", 0)),
-            "upcoming_deadline": int(p.get("upcoming_deadline", 0)),
-            "internet_quality": str(p.get("internet_quality", "")),
-        })
+        points.append(
+            {
+                "id": int(p.get("id", p.get("student_id", i))),
+                "x": float(p["x"]),
+                "y": float(p["y"]),
+                "cluster": int(p.get("cluster", p.get("strategy_label", -1))),
+                "burnout_level": float(p.get("burnout_level", 0.0)),
+                "productivity_score": float(p.get("productivity_score", 0.0)),
+                "exam_score": float(p.get("exam_score", 0.0)),
+                "mental_health_score": float(p.get("mental_health_score", 0.0)),
+                "focus_index": float(p.get("focus_index", 0.0)),
+                "age": int(p.get("age", 0)),
+                "gender": str(p.get("gender", "")),
+                "academic_level": str(p.get("academic_level", "")),
+                "study_hours": float(p.get("study_hours", 0.0)),
+                "self_study_hours": float(p.get("self_study_hours", 0.0)),
+                "online_classes_hours": float(p.get("online_classes_hours", 0.0)),
+                "social_media_hours": float(p.get("social_media_hours", 0.0)),
+                "gaming_hours": float(p.get("gaming_hours", 0.0)),
+                "sleep_hours": float(p.get("sleep_hours", 0.0)),
+                "screen_time_hours": float(p.get("screen_time_hours", 0.0)),
+                "exercise_minutes": float(p.get("exercise_minutes", 0.0)),
+                "caffeine_intake_mg": float(p.get("caffeine_intake_mg", 0.0)),
+                "part_time_job": int(p.get("part_time_job", 0)),
+                "upcoming_deadline": int(p.get("upcoming_deadline", 0)),
+                "internet_quality": str(p.get("internet_quality", "")),
+            }
+        )
 
     return points
 
 
 def _normalize_precomputed_background(raw_grid: dict) -> dict:
+    """Normalize saved Strategy Atlas background grid data."""
     if "x_range" in raw_grid and "y_range" in raw_grid and "z" in raw_grid:
         x_range = raw_grid["x_range"]
         y_range = raw_grid["y_range"]
@@ -455,7 +497,7 @@ def _normalize_precomputed_background(raw_grid: dict) -> dict:
         y_range = [row[0] for row in y_range]
     if z and not isinstance(z[0], list):
         grid_res = int(len(x_range))
-        z = [z[i:i + grid_res] for i in range(0, len(z), grid_res)]
+        z = [z[i : i + grid_res] for i in range(0, len(z), grid_res)]
 
     return {
         "x_range": [float(v) for v in x_range],
@@ -465,7 +507,10 @@ def _normalize_precomputed_background(raw_grid: dict) -> dict:
     }
 
 
-def load_precomputed_strategy_atlas(target: str):
+def load_precomputed_strategy_atlas(target: str) -> Optional[Dict[str, Any]]:
+    """
+    Load precomputed Strategy Atlas artifacts if they exist for the given target.
+    """
     _validate_target(target)
 
     if target in _precomputed_strategy_cache:
@@ -512,7 +557,8 @@ def load_precomputed_strategy_atlas(target: str):
     return loaded
 
 
-def predict_real(target: str, payload: Dict, df: pd.DataFrame) -> Dict:
+def predict_real(target: str, payload: Dict[str, Any], df: pd.DataFrame) -> Dict[str, Any]:
+    """Predict the categorical outcome level for a single student input."""
     bundle = _get_model_bundle(df, target)
     model_pipeline = bundle["model_pipeline"]
 
@@ -532,6 +578,7 @@ def predict_real(target: str, payload: Dict, df: pd.DataFrame) -> Dict:
 
 
 def get_global_feature_importance_real(target: str, df: pd.DataFrame) -> List[dict]:
+    """Return top aggregated global feature importances for a target."""
     bundle = _get_model_bundle(df, target)
     model_pipeline = bundle["model_pipeline"]
 
@@ -550,7 +597,12 @@ def get_global_feature_importance_real(target: str, df: pd.DataFrame) -> List[di
     return aggregated[:15]
 
 
-def explain_local_real(target: str, payload: Dict, df: pd.DataFrame) -> Dict[str, float]:
+def explain_local_real(
+    target: str,
+    payload: Dict[str, Any],
+    df: pd.DataFrame,
+) -> Dict[str, float]:
+    """Return normalized local LIME feature contributions for a single input."""
     bundle = _get_lime_bundle(df, target)
 
     feature_names = bundle["feature_names"]
@@ -577,7 +629,13 @@ def explain_local_real(target: str, payload: Dict, df: pd.DataFrame) -> Dict[str
     }
 
 
-def get_strategy_profiles(lime_norm, X, y_test, n_strategies=3):
+def get_strategy_profiles(
+    lime_norm: np.ndarray,
+    X: pd.DataFrame,
+    y_test: pd.Series,
+    n_strategies: int = 3,
+) -> tuple[List[dict], np.ndarray]:
+    """Cluster LIME explanation space into behavioural strategy profiles."""
     kmeans = KMeans(n_clusters=n_strategies, random_state=42)
     strategy_labels = kmeans.fit_predict(lime_norm)
 
@@ -590,7 +648,6 @@ def get_strategy_profiles(lime_norm, X, y_test, n_strategies=3):
 
         group_lime = lime_norm[idx]
         mean_importance = np.mean(group_lime, axis=0)
-
         top_indices = np.argsort(np.abs(mean_importance))[::-1]
 
         top_features = [
@@ -603,22 +660,25 @@ def get_strategy_profiles(lime_norm, X, y_test, n_strategies=3):
 
         success_rate = float((y_test.iloc[idx] == 2).mean() * 100)
 
-        strategy_profiles.append({
-            "name": f"Strategy {i + 1}",
-            "count": int(len(idx)),
-            "success_pct": round(success_rate, 1),
-            "features": top_features,
-        })
+        strategy_profiles.append(
+            {
+                "name": f"Strategy {i + 1}",
+                "count": int(len(idx)),
+                "success_pct": round(success_rate, 1),
+                "features": top_features,
+            }
+        )
 
     return strategy_profiles, strategy_labels
 
 
 def generate_counterfactual_real(
     target: str,
-    payload: Dict,
+    payload: Dict[str, Any],
     df: pd.DataFrame,
     target_level: Optional[str] = None,
 ) -> List[dict]:
+    """Generate DiCE-based counterfactual suggestions for a single input."""
     bundle = _get_model_bundle(df, target)
 
     desired_class_map = {"LOW": 0, "MEDIUM": 1, "HIGH": 2}
@@ -637,7 +697,7 @@ def generate_counterfactual_real(
         permitted_range={
             "sleep_hours": [7, 9],
             "study_hours": [current_study_hours, 12],
-        }
+        },
     )
 
     query_df = cf.cf_examples_list[0].test_instance_df
@@ -653,11 +713,13 @@ def generate_counterfactual_real(
             new = row[col]
 
             if str(original) != str(new):
-                changes.append({
-                    "feature": col,
-                    "current_value": _safe_item(original),
-                    "suggested_value": _safe_item(new),
-                })
+                changes.append(
+                    {
+                        "feature": col,
+                        "current_value": _safe_item(original),
+                        "suggested_value": _safe_item(new),
+                    }
+                )
 
         predicted_class = (
             int(row[bundle["category_col"]])
@@ -665,17 +727,23 @@ def generate_counterfactual_real(
             else desired_class
         )
 
-        options.append({
-            "option": i + 1,
-            "changes": changes,
-            "effort": ["Low", "Medium", "High"][min(i, 2)],
-            "new_level": _map_class_to_level(predicted_class),
-        })
+        options.append(
+            {
+                "option": i + 1,
+                "changes": changes,
+                "effort": ["Low", "Medium", "High"][min(i, 2)],
+                "new_level": _map_class_to_level(predicted_class),
+            }
+        )
 
     return options
 
 
-def _precomputed_lime_to_matrix(raw_contributions, feature_names: List[str]) -> np.ndarray:
+def _precomputed_lime_to_matrix(
+    raw_contributions: Any,
+    feature_names: List[str],
+) -> np.ndarray:
+    """Convert saved LIME contributions into a numeric matrix."""
     rows = []
 
     for item in raw_contributions:
@@ -687,7 +755,10 @@ def _precomputed_lime_to_matrix(raw_contributions, feature_names: List[str]) -> 
     return np.asarray(rows, dtype=float)
 
 
-def compute_strategy_atlas(df: pd.DataFrame, target: str) -> Dict:
+def compute_strategy_atlas(df: pd.DataFrame, target: str) -> Dict[str, Any]:
+    """
+    Compute or load the Strategy Atlas representation for a selected target.
+    """
     _validate_target(target)
 
     cache_key = f"strategy_atlas_{target}"
@@ -700,7 +771,6 @@ def compute_strategy_atlas(df: pd.DataFrame, target: str) -> Dict:
 
         X = lime_bundle["X_test"].reset_index(drop=True)
         y_test = lime_bundle["y_test"].reset_index(drop=True)
-
         feature_names = lime_bundle["feature_names"]
 
         lime_contributions = _precomputed_lime_to_matrix(
@@ -749,7 +819,6 @@ def compute_strategy_atlas(df: pd.DataFrame, target: str) -> Dict:
         raw_rows = raw_rows.reset_index(drop=True)
 
         X_encoded = _encode_dataframe_for_lime(X, label_encoders)
-
         lime_matrix = np.zeros((len(X_encoded), len(feature_names)))
 
         for i in range(len(X_encoded)):
@@ -777,12 +846,16 @@ def compute_strategy_atlas(df: pd.DataFrame, target: str) -> Dict:
             n_strategies=3,
         )
 
-        inverse_model = keras.Sequential([
-            keras.layers.Input(shape=(2,)),
-            keras.layers.Dense(128, activation="relu"),
-            keras.layers.Dense(128, activation="relu"),
-            keras.layers.Dense(len(feature_names), activation="linear"),
-        ])
+        # Lightweight inverse mapper used to estimate dominant feature regions
+        # across the 2D atlas background grid.
+        inverse_model = keras.Sequential(
+            [
+                keras.layers.Input(shape=(2,)),
+                keras.layers.Dense(128, activation="relu"),
+                keras.layers.Dense(128, activation="relu"),
+                keras.layers.Dense(len(feature_names), activation="linear"),
+            ]
+        )
         inverse_model.compile(optimizer="adam", loss="mse")
         inverse_model.fit(
             embedding,
@@ -793,8 +866,16 @@ def compute_strategy_atlas(df: pd.DataFrame, target: str) -> Dict:
         )
 
         grid_res = 100
-        x_range = np.linspace(embedding[:, 0].min() - 1, embedding[:, 0].max() + 1, grid_res)
-        y_range = np.linspace(embedding[:, 1].min() - 1, embedding[:, 1].max() + 1, grid_res)
+        x_range = np.linspace(
+            embedding[:, 0].min() - 1,
+            embedding[:, 0].max() + 1,
+            grid_res,
+        )
+        y_range = np.linspace(
+            embedding[:, 1].min() - 1,
+            embedding[:, 1].max() + 1,
+            grid_res,
+        )
         xx, yy = np.meshgrid(x_range, y_range)
         grid_pts = np.c_[xx.ravel(), yy.ravel()]
 
@@ -804,32 +885,34 @@ def compute_strategy_atlas(df: pd.DataFrame, target: str) -> Dict:
 
         points = []
         for i, row in raw_rows.iterrows():
-            points.append({
-                "id": int(row["student_id"]) if "student_id" in row else int(i),
-                "x": float(embedding[i, 0]),
-                "y": float(embedding[i, 1]),
-                "cluster": int(cluster_labels[i]),
-                "burnout_level": float(row["burnout_level"]),
-                "productivity_score": float(row["productivity_score"]),
-                "exam_score": float(row["exam_score"]),
-                "mental_health_score": float(row["mental_health_score"]),
-                "focus_index": float(row["focus_index"]),
-                "age": int(row["age"]),
-                "gender": str(row["gender"]),
-                "academic_level": str(row["academic_level"]),
-                "study_hours": float(row["study_hours"]),
-                "self_study_hours": float(row["self_study_hours"]),
-                "online_classes_hours": float(row["online_classes_hours"]),
-                "social_media_hours": float(row["social_media_hours"]),
-                "gaming_hours": float(row["gaming_hours"]),
-                "sleep_hours": float(row["sleep_hours"]),
-                "screen_time_hours": float(row["screen_time_hours"]),
-                "exercise_minutes": float(row["exercise_minutes"]),
-                "caffeine_intake_mg": float(row["caffeine_intake_mg"]),
-                "part_time_job": int(row["part_time_job"]),
-                "upcoming_deadline": int(row["upcoming_deadline"]),
-                "internet_quality": str(row["internet_quality"]),
-            })
+            points.append(
+                {
+                    "id": int(row["student_id"]) if "student_id" in row else int(i),
+                    "x": float(embedding[i, 0]),
+                    "y": float(embedding[i, 1]),
+                    "cluster": int(cluster_labels[i]),
+                    "burnout_level": float(row["burnout_level"]),
+                    "productivity_score": float(row["productivity_score"]),
+                    "exam_score": float(row["exam_score"]),
+                    "mental_health_score": float(row["mental_health_score"]),
+                    "focus_index": float(row["focus_index"]),
+                    "age": int(row["age"]),
+                    "gender": str(row["gender"]),
+                    "academic_level": str(row["academic_level"]),
+                    "study_hours": float(row["study_hours"]),
+                    "self_study_hours": float(row["self_study_hours"]),
+                    "online_classes_hours": float(row["online_classes_hours"]),
+                    "social_media_hours": float(row["social_media_hours"]),
+                    "gaming_hours": float(row["gaming_hours"]),
+                    "sleep_hours": float(row["sleep_hours"]),
+                    "screen_time_hours": float(row["screen_time_hours"]),
+                    "exercise_minutes": float(row["exercise_minutes"]),
+                    "caffeine_intake_mg": float(row["caffeine_intake_mg"]),
+                    "part_time_job": int(row["part_time_job"]),
+                    "upcoming_deadline": int(row["upcoming_deadline"]),
+                    "internet_quality": str(row["internet_quality"]),
+                }
+            )
 
         background = {
             "x_range": x_range.tolist(),
@@ -854,8 +937,11 @@ def compute_strategy_atlas(df: pd.DataFrame, target: str) -> Dict:
 def project_hypothetical_strategy_point(
     df: pd.DataFrame,
     target: str,
-    payload: Dict,
+    payload: Dict[str, Any],
 ) -> Dict[str, float]:
+    """
+    Project a hypothetical student input into the Strategy Atlas embedding space.
+    """
     _validate_target(target)
 
     precomputed = load_precomputed_strategy_atlas(target)
@@ -900,7 +986,8 @@ def project_hypothetical_strategy_point(
     }
 
 
-def summarize_cluster_real(df: pd.DataFrame, target: str, cluster_id: int) -> Dict:
+def summarize_cluster_real(df: pd.DataFrame, target: str, cluster_id: int) -> Dict[str, Any]:
+    """Summarize aggregate target metrics for a selected strategy cluster."""
     _validate_target(target)
 
     cache_key = f"strategy_atlas_{target}"
@@ -928,11 +1015,26 @@ def summarize_cluster_real(df: pd.DataFrame, target: str, cluster_id: int) -> Di
     return {
         "cluster_id": int(cluster_id),
         "size": int(len(subset)),
-        "avg_productivity": round(float(np.mean([p["productivity_score"] for p in subset])), 2),
-        "avg_burnout": round(float(np.mean([p["burnout_level"] for p in subset])), 2),
-        "avg_exam_score": round(float(np.mean([p["exam_score"] for p in subset])), 2),
-        "avg_mental_health_score": round(float(np.mean([p["mental_health_score"] for p in subset])), 2),
-        "avg_focus_index": round(float(np.mean([p["focus_index"] for p in subset])), 2),
+        "avg_productivity": round(
+            float(np.mean([p["productivity_score"] for p in subset])),
+            2,
+        ),
+        "avg_burnout": round(
+            float(np.mean([p["burnout_level"] for p in subset])),
+            2,
+        ),
+        "avg_exam_score": round(
+            float(np.mean([p["exam_score"] for p in subset])),
+            2,
+        ),
+        "avg_mental_health_score": round(
+            float(np.mean([p["mental_health_score"] for p in subset])),
+            2,
+        ),
+        "avg_focus_index": round(
+            float(np.mean([p["focus_index"] for p in subset])),
+            2,
+        ),
         "top_features": [],
         "used_placeholder_model": False,
     }
