@@ -13,12 +13,14 @@ type Props = {
   selection: SelectionState;
   items?: FeatureImportanceItem[];
   localItems?: Record<string, number> | null;
+  compact?: boolean;
 };
 
 export default function FeatureImportancePanel({
   selection,
   items = [],
   localItems = null,
+  compact = false,
 }: Props) {
   const fallbackNames =
     selection.type === "point"
@@ -79,8 +81,10 @@ export default function FeatureImportancePanel({
   const globalValues = sortedFeatureNames.map((name) => globalMap[name] ?? 0);
   const localValues = sortedFeatureNames.map((name) => localMap[name] ?? 0);
 
-  const ROW_HEIGHT = hasLocal ? 26 : 20;
-  const chartHeight = Math.max(220, sortedFeatureNames.length * ROW_HEIGHT);
+  const ROW_HEIGHT = hasLocal ? (compact ? 22 : 26) : compact ? 16 : 20;
+  const MIN_HEIGHT = compact ? 170 : 220;
+  const chartHeight = Math.max(MIN_HEIGHT, sortedFeatureNames.length * ROW_HEIGHT);
+
   const maxValue = Math.max(
     0.01,
     ...globalValues,

@@ -68,7 +68,19 @@ class FeatureImportanceResponse(BaseModel):
     used_placeholder_model: bool = True
 
 
-class UmapPoint(BaseModel):
+class StrategyFeature(BaseModel):
+    name: str
+    importance: float
+
+
+class StrategyProfile(BaseModel):
+    name: str
+    count: int
+    success_pct: float
+    features: List[StrategyFeature]
+
+
+class StrategyAtlasPoint(BaseModel):
     id: int
     x: float
     y: float
@@ -97,9 +109,28 @@ class UmapPoint(BaseModel):
     focus_index: float
 
 
-class UmapResponse(BaseModel):
-    points: List[UmapPoint]
-    used_placeholder_model: bool = True
+class StrategyAtlasBackground(BaseModel):
+    x_range: List[float]
+    y_range: List[float]
+    z: List[List[int]]
+    feature_labels: List[str]
+
+
+class StrategyAtlasResponse(BaseModel):
+    points: List[StrategyAtlasPoint]
+    background: StrategyAtlasBackground
+    strategy_profiles: List[StrategyProfile] = []
+    used_placeholder_model: bool = False
+
+
+class StrategyAtlasProjectionRequest(BaseModel):
+    target: Literal["burnout_level", "productivity_score", "exam_score", "mental_health_score", "focus_index"]
+    inputs: PredictionInput
+
+
+class StrategyAtlasProjectionResponse(BaseModel):
+    x: float
+    y: float
 
 
 class ClusterSummaryResponse(BaseModel):

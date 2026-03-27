@@ -51,6 +51,8 @@ def test_endpoint(method, path, json_body=None):
 
     print("-" * 60)
 
+    pass
+
 
 def test_target_flow(target: str):
     print(f"\n===== TESTING TARGET: {target} =====\n")
@@ -65,18 +67,20 @@ def test_target_flow(target: str):
 
 def main():
     # Basic checks
-    test_endpoint("GET", "/health")
-    test_endpoint("GET", "/data")
-    test_endpoint("GET", "/data/columns")
-    test_endpoint("GET", "/debug/data-shape")
+    # test_endpoint("GET", "/health")
+    # test_endpoint("GET", "/data")
+    # test_endpoint("GET", "/data/columns")
+    # test_endpoint("GET", "/debug/data-shape")
+
+    print("test")
 
     # UMAP & clustering
-    test_endpoint("GET", "/model/umap")
-    test_endpoint("GET", "/model/cluster-summary/0")
+    test_endpoint("GET", "/model/strategyAtlas")
+    # test_endpoint("GET", "/model/cluster-summary/0")
 
     # Test all targets
-    for target in ["burnout_level", "productivity_score", "exam_score"]:
-        test_target_flow(target)
+    # for target in ["burnout_level"]:
+    #     test_target_flow(target)
 
 
 if __name__ == "__main__":

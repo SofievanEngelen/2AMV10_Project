@@ -1,23 +1,23 @@
 import "./App.css";
 import { useEffect, useMemo, useState } from "react";
-import UmapPanel from "./components/UmapPanel";
+import StrategyAtlasPanel from "./components/StrategyAtlasPanel.tsx";
 import ClusterPanel from "./components/ClusterPanel";
 import FeatureImportancePanel from "./components/FeatureImportancePanel";
 import CounterfactualPanel from "./components/CounterfactualPanel";
+import ModelStrategiesPanel from "./components/ModelStrategiesPanel";
 import {
   fetchClusterSummary,
   fetchCounterfactuals,
   fetchFeatureImportance,
   fetchLocalExplanation,
-  fetchPrediction,
-  fetchUmap,
+  fetchPrediction, fetchStrategyAtlas, fetchStrategyAtlasProjection,
 } from "./api/client";
 import type {
   BackendPredictionInput,
   ClusterSummaryResponse,
   FeatureImportanceItem,
   LocalExplanationResponse,
-  PredictionResponse,
+  PredictionResponse, StrategyAtlasBackground,
   Target,
 } from "./api/types";
 
@@ -60,7 +60,6 @@ type LegacyPrediction = {
   confidence: string;
   currentLevel: string;
   targetLevel: string;
-  advice: string[];
 };
 
 const numericWhatIfFields = [
@@ -117,15 +116,32 @@ const defaultInputs: BackendPredictionInput = {
 
 export default function Dashboard() {
   const [target, setTarget] = useState("exam");
-  const [colourBy, setColourBy] = useState("exam_score");
+  const [colourBy, setColourBy] = useState("cluster");
   const [selection, setSelection] = useState<SelectionState>({ type: "none" });
+  const [atlasBackground, setAtlasBackground] = useState<StrategyAtlasBackground | null>(null);
+  const [strategyProfiles, setStrategyProfiles] = useState([]);
+
+  type MiddleSectionKey = "analysis" | "importance" | "strategies";
+
+  const [openMiddleSections, setOpenMiddleSections] = useState<MiddleSectionKey[]>([
+    "analysis",
+    "importance",
+  ]);
+
+  const isMiddleSectionOpen = (key: MiddleSectionKey) =>
+    openMiddleSections.includes(key);
+
+  const handleMiddleSectionClick = (key: MiddleSectionKey) => {
+    if (openMiddleSections.includes(key)) return;
+
+    setOpenMiddleSections(([first, second]) => [second, key]);
+  };
 
   const [prediction, setPrediction] = useState<LegacyPrediction>({
     stressLevel: "MEDIUM",
     confidence: "High",
     currentLevel: "MEDIUM",
     targetLevel: "LOW",
-    advice: ["+2 hours of sleep", "+1 hour less phone use"],
   });
 
   const [backendPrediction, setBackendPrediction] =
@@ -149,11 +165,42 @@ export default function Dashboard() {
     useState<StudentPoint | null>(null);
   const [whatIfValues, setWhatIfValues] = useState<Record<string, string> | null>(null);
 
-  useEffect(() => {
-    async function loadUmap() {
-      try {
-        const res = await fetchUmap();
+  const COUNTERFACTUAL_STYLES = [
+    { color: "#013220",  symbol: "star" as const, label: "Strategy 1" },
+    { color: "#00008B", symbol: "star" as const, label: "Strategy 2" },
+    { color: "#8B0000", symbol: "star" as const, label: "Strategy 3" },
+  ];
 
+  const STRATEGY_COLOURS = [
+    "#2f7ed8", // Strategy 1 / Cluster 0
+    "#f27c2a", // Strategy 2 / Cluster 1
+    "#58b43d", // Strategy 3 / Cluster 2
+  ];
+
+  const [selectedCfIndex, setSelectedCfIndex] = useState<number | null>(null);
+  const [hoveredCfIndex, setHoveredCfIndex] = useState<number | null>(null);
+
+  const styledCounterfactuals = useMemo(() => {
+    return counterfactualOptions.map((option, index) => ({
+      ...option,
+      ...COUNTERFACTUAL_STYLES[index % COUNTERFACTUAL_STYLES.length],
+      index,
+    }));
+  }, [counterfactualOptions]);
+
+  const activeCfIndex = selectedCfIndex ?? hoveredCfIndex ?? null;
+
+  const [previewCounterfactualPoint, setPreviewCounterfactualPoint] =
+  useState<StudentPoint | null>(null);
+
+  useEffect(() => {
+    async function loadStrategyAtlas() {
+      try {
+        const backendTarget = mapUiTargetToBackendTarget(target);
+        const res = await fetchStrategyAtlas(backendTarget);
+
+        setStrategyProfiles(res.strategy_profiles ?? []);
+        setAtlasBackground(res.background);
         setBackendData(
           res.points.map((p) => ({
             id: String(p.id),
@@ -185,12 +232,13 @@ export default function Dashboard() {
           }))
         );
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to load UMAP");
+        setError(err instanceof Error ? err.message : "Failed to load Strategy Atlas");
+        setBackendData([]);
       }
     }
 
-    loadUmap();
-  }, []);
+    loadStrategyAtlas();
+  }, [target]);
 
   useEffect(() => {
     async function loadFeatureImportanceData() {
@@ -320,7 +368,6 @@ export default function Dashboard() {
       confidence: "-",
       currentLevel: "-",
       targetLevel: "LOW",
-      advice: [],
     });
   }, [target]);
 
@@ -431,6 +478,77 @@ export default function Dashboard() {
         whatIfFillValues.internet_quality || defaultInputs.internet_quality,
     });
   }, [whatIfFillValues]);
+
+
+  useEffect(() => {
+    async function projectPreviewCounterfactual() {
+      if (activeCfIndex == null || !styledCounterfactuals[activeCfIndex]) {
+        setPreviewCounterfactualPoint(null);
+        return;
+      }
+
+      const cf = styledCounterfactuals[activeCfIndex];
+
+      const baseValues =
+        whatIfFillValues ?? inputsToWhatIfValues(latestInputs);
+
+      const updatedValues: Record<string, string> = {
+        ...baseValues,
+      };
+
+      cf.changes.forEach((change) => {
+        updatedValues[change.feature] = String(change.suggested_value);
+      });
+
+      const inputs: BackendPredictionInput = {
+        age: parseInt(updatedValues.age, 10),
+        gender: updatedValues.gender,
+        academic_level: updatedValues.academic_level,
+        study_hours: Number(updatedValues.study_hours),
+        self_study_hours: Number(updatedValues.self_study_hours),
+        online_classes_hours: Number(updatedValues.online_classes_hours),
+        social_media_hours: Number(updatedValues.social_media_hours),
+        gaming_hours: Number(updatedValues.gaming_hours),
+        sleep_hours: Number(updatedValues.sleep_hours),
+        screen_time_hours: Number(updatedValues.screen_time_hours),
+        exercise_minutes: Number(updatedValues.exercise_minutes),
+        caffeine_intake_mg: Number(updatedValues.caffeine_intake_mg),
+        part_time_job: Number(updatedValues.part_time_job),
+        upcoming_deadline: Number(updatedValues.upcoming_deadline),
+        internet_quality: updatedValues.internet_quality,
+      };
+
+      try {
+        const backendTarget = mapUiTargetToBackendTarget(target);
+
+        const projected = await fetchStrategyAtlasProjection({
+          target: backendTarget,
+          inputs,
+        });
+
+        setPreviewCounterfactualPoint({
+          id: `preview-${cf.option}`,
+          x: projected.x,
+          y: projected.y,
+          cluster: -2,
+
+          burnout_level: 50,
+          productivity_score: 50,
+          exam_score: 50,
+          mental_health_score: 50,
+          focus_index: 70,
+
+          ...inputs,
+        });
+      } catch (err) {
+        console.error("Failed to preview counterfactual projection", err);
+        setPreviewCounterfactualPoint(null);
+      }
+    }
+
+    projectPreviewCounterfactual();
+  }, [activeCfIndex, styledCounterfactuals, whatIfFillValues, latestInputs, target]);
+
 
   const data: StudentPoint[] = useMemo(() => {
     if (backendData.length > 0) return backendData;
@@ -618,15 +736,14 @@ export default function Dashboard() {
         inputs,
       };
 
-      const [pred, explanation, cf] = await Promise.all([
+      const [pred, explanation] = await Promise.all([
         fetchPrediction(payload),
         fetchLocalExplanation(payload),
-        fetchCounterfactuals(payload),
       ]);
 
       setBackendPrediction(pred);
       setLocalExplanation(explanation);
-      setCounterfactualOptions(normalizeCounterfactualResponse(cf));
+      setCounterfactualOptions([]);
 
       const matchedPoint = data.find((point) =>
         pointMatchesWhatIfValues(point, values)
@@ -645,13 +762,6 @@ export default function Dashboard() {
         confidence: `${Math.round(pred.confidence * 100)}%`,
         currentLevel,
         targetLevel: goalLevel,
-        advice:
-          normalizeCounterfactualResponse(cf)[0]?.changes?.length > 0
-            ? normalizeCounterfactualResponse(cf)[0].changes.map(
-                (item) =>
-                  `${prettyFeatureName(item.feature)}: ${item.current_value} → ${item.suggested_value}`
-              )
-            : ["No suggestion available"],
       });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Prediction failed");
@@ -695,7 +805,7 @@ export default function Dashboard() {
     }
   };
 
-  const handleApplyCounterfactual = (option: CounterfactualOption) => {
+  const handleApplyCounterfactual = async (option: CounterfactualOption) => {
     const baseValues =
       whatIfFillValues ??
       inputsToWhatIfValues(latestInputs);
@@ -708,54 +818,164 @@ export default function Dashboard() {
       updatedValues[change.feature] = String(change.suggested_value);
     });
 
+    // 1. Update the form (UI)
     setWhatIfValues(updatedValues);
+
+    // 2. Convert to backend input
+    const inputs: BackendPredictionInput = {
+      age: parseInt(updatedValues.age, 10),
+      gender: updatedValues.gender,
+      academic_level: updatedValues.academic_level,
+      study_hours: Number(updatedValues.study_hours),
+      self_study_hours: Number(updatedValues.self_study_hours),
+      online_classes_hours: Number(updatedValues.online_classes_hours),
+      social_media_hours: Number(updatedValues.social_media_hours),
+      gaming_hours: Number(updatedValues.gaming_hours),
+      sleep_hours: Number(updatedValues.sleep_hours),
+      screen_time_hours: Number(updatedValues.screen_time_hours),
+      exercise_minutes: Number(updatedValues.exercise_minutes),
+      caffeine_intake_mg: Number(updatedValues.caffeine_intake_mg),
+      part_time_job: Number(updatedValues.part_time_job),
+      upcoming_deadline: Number(updatedValues.upcoming_deadline),
+      internet_quality: updatedValues.internet_quality,
+    };
+
+    try {
+      const backendTarget = mapUiTargetToBackendTarget(target);
+
+      const projected = await fetchStrategyAtlasProjection({
+        target: backendTarget,
+        inputs,
+      });
+
+      const newPoint: StudentPoint = {
+        id: "-1",
+        x: projected.x,
+        y: projected.y,
+        cluster: -1,
+
+        burnout_level: 50,
+        productivity_score: 50,
+        exam_score: 50,
+        mental_health_score: 50,
+        focus_index: 70,
+
+        ...inputs,
+      };
+
+      // 3. Move the red point
+      setTemporaryWhatIfPoint(newPoint);
+
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Failed to project counterfactual point"
+      );
+    }
   };
 
-  function handleShowInGraph(values: Record<string, string>) {
+  async function handleShowInGraph(values: Record<string, string>) {
     const existingPoint = data.find((point) =>
       pointMatchesWhatIfValues(point, values)
     );
 
     if (existingPoint) {
-      setTemporaryWhatIfPoint(null);
-      setSelection({ type: "point", point: existingPoint });
+      setTemporaryWhatIfPoint(existingPoint);
       return;
     }
 
-    const { x, y } = computeTemporaryUmapPosition(values);
+    try {
+      setError(null);
 
-    const tempPoint: StudentPoint = {
-      id: "-1",
-      x,
-      y,
-      cluster: -1,
+      const inputs: BackendPredictionInput = {
+        age: parseInt(values.age ?? `${defaultInputs.age}`, 10),
+        gender: values.gender || defaultInputs.gender,
+        academic_level: values.academic_level || defaultInputs.academic_level,
+        study_hours: parseNumber(values.study_hours, defaultInputs.study_hours),
+        self_study_hours: parseNumber(
+          values.self_study_hours,
+          defaultInputs.self_study_hours
+        ),
+        online_classes_hours: parseNumber(
+          values.online_classes_hours,
+          defaultInputs.online_classes_hours
+        ),
+        social_media_hours: parseNumber(
+          values.social_media_hours,
+          defaultInputs.social_media_hours
+        ),
+        gaming_hours: parseNumber(values.gaming_hours, defaultInputs.gaming_hours),
+        sleep_hours: parseNumber(values.sleep_hours, defaultInputs.sleep_hours),
+        screen_time_hours: parseNumber(
+          values.screen_time_hours,
+          defaultInputs.screen_time_hours
+        ),
+        exercise_minutes: parseInt(
+          values.exercise_minutes ?? `${defaultInputs.exercise_minutes}`,
+          10
+        ),
+        caffeine_intake_mg: parseInt(
+          values.caffeine_intake_mg ?? `${defaultInputs.caffeine_intake_mg}`,
+          10
+        ),
+        part_time_job: parseInt(
+          values.part_time_job ?? `${defaultInputs.part_time_job}`,
+          10
+        ),
+        upcoming_deadline: parseInt(
+          values.upcoming_deadline ?? `${defaultInputs.upcoming_deadline}`,
+          10
+        ),
+        internet_quality: values.internet_quality || defaultInputs.internet_quality,
+      };
 
-      burnout_level: 50,
-      productivity_score: 50,
-      exam_score: 50,
-      mental_health_score: 50,
-      focus_index: 70,
+      const backendTarget = mapUiTargetToBackendTarget(target);
+      const projected = await fetchStrategyAtlasProjection({
+        target: backendTarget,
+        inputs,
+      });
 
-      age: Number(values.age),
-      gender: values.gender,
-      academic_level: values.academic_level,
-      study_hours: Number(values.study_hours),
-      self_study_hours: Number(values.self_study_hours),
-      online_classes_hours: Number(values.online_classes_hours),
-      social_media_hours: Number(values.social_media_hours),
-      gaming_hours: Number(values.gaming_hours),
-      sleep_hours: Number(values.sleep_hours),
-      screen_time_hours: Number(values.screen_time_hours),
-      exercise_minutes: Number(values.exercise_minutes),
-      caffeine_intake_mg: Number(values.caffeine_intake_mg),
-      part_time_job: Number(values.part_time_job),
-      upcoming_deadline: Number(values.upcoming_deadline),
-      internet_quality: values.internet_quality,
-    };
+      const tempPoint: StudentPoint = {
+        id: "-1",
+        x: projected.x,
+        y: projected.y,
+        cluster: -1,
 
-    setTemporaryWhatIfPoint(tempPoint);
-    setSelection({ type: "point", point: tempPoint });
+        burnout_level: 50,
+        productivity_score: 50,
+        exam_score: 50,
+        mental_health_score: 50,
+        focus_index: 70,
+
+        age: Number(values.age),
+        gender: values.gender,
+        academic_level: values.academic_level,
+        study_hours: Number(values.study_hours),
+        self_study_hours: Number(values.self_study_hours),
+        online_classes_hours: Number(values.online_classes_hours),
+        social_media_hours: Number(values.social_media_hours),
+        gaming_hours: Number(values.gaming_hours),
+        sleep_hours: Number(values.sleep_hours),
+        screen_time_hours: Number(values.screen_time_hours),
+        exercise_minutes: Number(values.exercise_minutes),
+        caffeine_intake_mg: Number(values.caffeine_intake_mg),
+        part_time_job: Number(values.part_time_job),
+        upcoming_deadline: Number(values.upcoming_deadline),
+        internet_quality: values.internet_quality,
+      };
+
+      setTemporaryWhatIfPoint(tempPoint);
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Failed to project temporary Strategy Atlas point"
+      );
+    }
   }
+
+  const showAllMiddlePanels = selection.type === "none";
 
   return (
     <div className="app-shell">
@@ -787,12 +1007,14 @@ export default function Dashboard() {
 
       <main className="dashboard-grid">
         <section className="column-shell">
-          <div className="column-header">UMAP</div>
+          <div className="column-header">Strategy Atlas</div>
           <div className="column-body">
-            <UmapPanel
+            <StrategyAtlasPanel
               data={data}
+              background={atlasBackground}
               temporaryPoint={temporaryWhatIfPoint}
               colourBy={colourBy}
+              strategyColors={STRATEGY_COLOURS}
               onColourByChange={setColourBy}
               selection={selection}
               onPointSelect={(point) => {
@@ -816,14 +1038,43 @@ export default function Dashboard() {
                 setSelection({ type: "none" });
                 setLocalExplanation(null);
               }}
+              counterfactualOptions={styledCounterfactuals}
+              activeCfIndex={activeCfIndex}
+              previewPoint={previewCounterfactualPoint}
             />
           </div>
         </section>
 
         <section className="column-shell">
-          <div className="middle-column-body">
-            <div className="subcolumn-shell">
-              <div className="column-header">
+          <div
+            className={`middle-column-body ${
+              showAllMiddlePanels ? "middle-column-body--three" : ""
+            }`}
+          >
+            <div
+              className="subcolumn-shell"
+              style={
+                showAllMiddlePanels
+                  ? undefined
+                  : {
+                      flex: isMiddleSectionOpen("analysis") ? 1 : "0 0 auto",
+                      minHeight: isMiddleSectionOpen("analysis") ? 0 : 56,
+                    }
+              }
+            >
+              <div
+                className="column-header"
+                onClick={
+                  showAllMiddlePanels
+                    ? undefined
+                    : () => handleMiddleSectionClick("analysis")
+                }
+                style={
+                  showAllMiddlePanels
+                    ? undefined
+                    : { cursor: "pointer", userSelect: "none" }
+                }
+              >
                 {selection.type === "point"
                   ? "Student analysis"
                   : selection.type === "cluster"
@@ -831,25 +1082,88 @@ export default function Dashboard() {
                   : "Global analysis"}
               </div>
 
-              <div className="subcolumn-body">
-                <ClusterPanel
-                  selection={selection}
-                  allData={data}
-                  clusterSummary={clusterSummary}
-                />
-              </div>
+              {(showAllMiddlePanels || isMiddleSectionOpen("analysis")) && (
+                <div className="subcolumn-body">
+                  <ClusterPanel
+                    selection={selection}
+                    allData={data}
+                    clusterSummary={clusterSummary}
+                  />
+                </div>
+              )}
             </div>
 
-            <div className="subcolumn-shell">
-              <div className="column-header">Feature importance</div>
-
-              <div className="subcolumn-body">
-                <FeatureImportancePanel
-                  selection={selection}
-                  items={featureImportance}
-                  localItems={localExplanation?.contributions ?? null}
-                />
+            <div
+              className="subcolumn-shell"
+              style={
+                showAllMiddlePanels
+                  ? undefined
+                  : {
+                      flex: isMiddleSectionOpen("importance") ? 1 : "0 0 auto",
+                      minHeight: isMiddleSectionOpen("importance") ? 0 : 56,
+                    }
+              }
+            >
+              <div
+                className="column-header"
+                onClick={
+                  showAllMiddlePanels
+                    ? undefined
+                    : () => handleMiddleSectionClick("importance")
+                }
+                style={
+                  showAllMiddlePanels
+                    ? undefined
+                    : { cursor: "pointer", userSelect: "none" }
+                }
+              >
+                Feature importance
               </div>
+
+              {(showAllMiddlePanels || isMiddleSectionOpen("importance")) && (
+                <div className="subcolumn-body">
+                  <FeatureImportancePanel
+                    selection={selection}
+                    items={featureImportance}
+                    localItems={localExplanation?.contributions ?? null}
+                    compact={showAllMiddlePanels}
+                  />
+                </div>
+              )}
+            </div>
+
+            <div
+              className="subcolumn-shell"
+              style={
+                showAllMiddlePanels
+                  ? undefined
+                  : {
+                      flex: isMiddleSectionOpen("strategies") ? 1 : "0 0 auto",
+                      minHeight: isMiddleSectionOpen("strategies") ? 0 : 56,
+                    }
+              }
+            >
+              <div
+                className="column-header"
+                onClick={
+                  showAllMiddlePanels
+                    ? undefined
+                    : () => handleMiddleSectionClick("strategies")
+                }
+                style={
+                  showAllMiddlePanels
+                    ? undefined
+                    : { cursor: "pointer", userSelect: "none" }
+                }
+              >
+                Model strategies
+              </div>
+
+              {(showAllMiddlePanels || isMiddleSectionOpen("strategies")) && (
+                <div className="subcolumn-body">
+                  <ModelStrategiesPanel strategyProfiles={strategyProfiles} />
+                </div>
+              )}
             </div>
           </div>
         </section>
@@ -862,11 +1176,14 @@ export default function Dashboard() {
               targetLabel={getUiTargetLabel(target)}
               onPredict={handlePredict}
               onShowInGraph={handleShowInGraph}
-              counterfactualOptions={counterfactualOptions}
+              counterfactualOptions={styledCounterfactuals}
               onTargetLevelChange={handleTargetLevelChange}
               onSuggestChanges={handleSuggestChanges}
               onApplyCounterfactual={handleApplyCounterfactual}
               fillValues={whatIfFillValues}
+              onHoverOption={(i) => setHoveredCfIndex(i)}
+              onSelectOption={(i) => setSelectedCfIndex(i)}
+              selectedIndex={selectedCfIndex}
             />
           </div>
         </section>
@@ -1032,7 +1349,7 @@ function pointMatchesWhatIfValues(
   return true;
 }
 
-function computeTemporaryUmapPosition(values: Record<string, string>) {
+function computeTemporaryStrategyAtlasPosition(values: Record<string, string>) {
   const study_hours = Number(values.study_hours);
   const self_study_hours = Number(values.self_study_hours);
   const social_media_hours = Number(values.social_media_hours);

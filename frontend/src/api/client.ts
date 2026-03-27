@@ -6,7 +6,7 @@ import type {
   PredictRequest,
   PredictionResponse,
   Target,
-  UmapResponse,
+  StrategyAtlasResponse,
 } from "./types";
 
 const API_URL = import.meta.env.VITE_API_URL ?? "http://127.0.0.1:8000";
@@ -28,8 +28,15 @@ async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   return response.json() as Promise<T>;
 }
 
-export function fetchUmap() {
-  return apiFetch<UmapResponse>("/model/umap");
+export function fetchStrategyAtlas(target: Target) {
+  return apiFetch<StrategyAtlasResponse>(`/model/strategyAtlas?target=${target}`);
+}
+
+export function fetchStrategyAtlasProjection(payload: PredictRequest) {
+  return apiFetch<{ x: number; y: number }>("/model/strategyAtlas/project", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
 }
 
 export function fetchFeatureImportance(target: Target) {

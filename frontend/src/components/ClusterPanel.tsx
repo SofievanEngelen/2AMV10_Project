@@ -63,6 +63,8 @@ export default function ClusterPanel({
       ? selection.points
       : allData;
 
+  const showComparison = selection.type !== "none";
+
   const profileRows =
     selection.type === "point"
       ? [
@@ -193,52 +195,49 @@ export default function ClusterPanel({
     selection.type === "point" ? "Student vs Rest" : "Cluster vs Rest";
 
   return (
-    <div className="cluster-panel-content">
-      <section className="analysis-section-block">
-        <div className="middle-section">
-          <div className="middle-section-title">Profile overview</div>
-          <div className="middle-values-box">
-            <div className="two-col-list">
-              {profileRows.flatMap((row) => [
-                <div key={`${row.label}-label`}>{row.label}:</div>,
-                <div key={`${row.label}-value`} className="value-right">
-                  {row.value}
-                </div>,
-              ])}
-            </div>
-          </div>
-        </div>
-
-        <div className="middle-section">
-          <div className="middle-section-title">{comparisonTitle}</div>
-          <div className="middle-values-box">
-            <div className="two-col-list">
-              {selection.type === "cluster" && clusterSummary ? (
-                <>
-                  {comparisonRows.flatMap((row) => [
-                    <div key={`${row.label}-label`}>{row.label}:</div>,
-                    <div key={`${row.label}-value`} className="value-right">
-                      {row.value}
-                    </div>,
-                  ])}
-                </>
-              ) : comparisonRows.length > 0 ? (
-                comparisonRows.flatMap((row) => [
+      <div className="cluster-panel-content">
+        <section className="analysis-section-block">
+          <div className="middle-section">
+            <div className="middle-section-title">Profile overview</div>
+            <div className="middle-values-box">
+              <div className="two-col-list">
+                {profileRows.flatMap((row) => [
                   <div key={`${row.label}-label`}>{row.label}:</div>,
                   <div key={`${row.label}-value`} className="value-right">
                     {row.value}
                   </div>,
-                ])
-              ) : (
-                <>
-                  <div>No comparison</div>
-                  <div className="value-right">Select a point or cluster</div>
-                </>
-              )}
+                ])}
+              </div>
             </div>
           </div>
-        </div>
-      </section>
-    </div>
-  );
+
+          {showComparison && (
+            <div className="middle-section">
+              <div className="middle-section-title">{comparisonTitle}</div>
+              <div className="middle-values-box">
+                <div className="two-col-list">
+                  {selection.type === "cluster" && clusterSummary ? (
+                    <>
+                      {comparisonRows.flatMap((row) => [
+                        <div key={`${row.label}-label`}>{row.label}:</div>,
+                        <div key={`${row.label}-value`} className="value-right">
+                          {row.value}
+                        </div>,
+                      ])}
+                    </>
+                  ) : comparisonRows.length > 0 ? (
+                    comparisonRows.flatMap((row) => [
+                      <div key={`${row.label}-label`}>{row.label}:</div>,
+                      <div key={`${row.label}-value`} className="value-right">
+                        {row.value}
+                      </div>,
+                    ])
+                  ) : null}
+                </div>
+              </div>
+            </div>
+          )}
+        </section>
+      </div>
+    );
 }

@@ -61,17 +61,56 @@ export type FeatureImportanceResponse = {
   used_placeholder_model: boolean;
 };
 
-export type UmapPoint = {
+export type StrategyAtlasPoint = {
   id: number;
   x: number;
   y: number;
   cluster: number;
   burnout_level: number;
   productivity_score: number;
+  exam_score: number;
+  mental_health_score: number;
+  focus_index: number;
+  age: number;
+  gender: string;
+  academic_level: string;
+  study_hours: number;
+  self_study_hours: number;
+  online_classes_hours: number;
+  social_media_hours: number;
+  gaming_hours: number;
+  sleep_hours: number;
+  screen_time_hours: number;
+  exercise_minutes: number;
+  caffeine_intake_mg: number;
+  part_time_job: number;
+  upcoming_deadline: number;
+  internet_quality: string;
 };
 
-export type UmapResponse = {
-  points: UmapPoint[];
+export type StrategyAtlasBackground = {
+  x_range: number[];
+  y_range: number[];
+  z: number[][];
+  feature_labels: string[];
+};
+
+export type StrategyFeature = {
+  name: string;
+  importance: number;
+};
+
+export type StrategyProfile = {
+  name: string;
+  count: number;
+  success_pct: number;
+  features: StrategyFeature[];
+};
+
+export type StrategyAtlasResponse = {
+  points: StrategyAtlasPoint[];
+  background: StrategyAtlasBackground | null;
+  strategy_profiles: StrategyProfile[];
   used_placeholder_model: boolean;
 };
 

@@ -9,7 +9,6 @@ type LegacyPrediction = {
   confidence: string;
   currentLevel: string;
   targetLevel: string;
-  advice: string[];
 };
 
 type Props = {
@@ -17,11 +16,19 @@ type Props = {
   targetLabel: string;
   onPredict: (values: Record<string, string>) => void;
   onShowInGraph?: (values: Record<string, string>) => void;
-  counterfactualOptions?: CounterfactualOption[];
+  counterfactualOptions?: (CounterfactualOption & {
+    color?: string;
+    symbol?: string;
+    label?: string;
+    index?: number;
+  })[];
   onTargetLevelChange?: (value: string) => void;
   onSuggestChanges?: () => void;
   onApplyCounterfactual?: (option: CounterfactualOption) => void;
   fillValues?: Record<string, string> | null;
+  onHoverOption?: (index: number | null) => void;
+  onSelectOption?: (index: number) => void;
+  selectedIndex?: number | null;
 };
 
 const whatIfFields = [
@@ -88,13 +95,13 @@ const initialFormValues: Record<string, string> = {
 function prettyFeatureName(name: string) {
   const map: Record<string, string> = {
     study_hours: "Study hours",
-    screen_time_hours: "Phone usage",
-    social_media_hours: "Social media",
-    exercise_minutes: "Exercise",
+    screen_time_hours: "Screen time hours",
+    social_media_hours: "Social media hours",
+    exercise_minutes: "Exercise minutes",
     sleep_hours: "Sleep hours",
-    self_study_hours: "Self study",
-    online_classes_hours: "Online classes",
-    focus_index: "Focus",
+    self_study_hours: "Self study hours",
+    online_classes_hours: "Online classes hours",
+    focus_index: "Focus index",
     gaming_hours: "Gaming hours",
   };
   return map[name] ?? name.replaceAll("_", " ");
@@ -105,10 +112,10 @@ function formatValue(feature: string, value: number | string) {
 
   if (feature === "exercise_minutes") {
     const hours = value / 60;
-    return Number.isInteger(hours) ? `${hours}` : `${hours.toFixed(2)}`;
+    return Number.isInteger(hours) ? `${hours.toFixed(2)}` : `${hours.toFixed(2)}`;
   }
 
-  return `${value}`;
+  return `${value.toFixed(2)}`;
 }
 
 export default function CounterfactualPanel({
@@ -121,6 +128,9 @@ export default function CounterfactualPanel({
   onSuggestChanges,
   onApplyCounterfactual,
   fillValues,
+  onHoverOption,
+  onSelectOption,
+  selectedIndex,
 }: Props) {
   const [activeTab, setActiveTab] = useState<"whatif" | "counterfactuals">("whatif");
   const [values, setValues] = useState<Record<string, string>>(initialFormValues);
@@ -202,7 +212,11 @@ export default function CounterfactualPanel({
           </div>
 
           <div className="whatif-action-row">
-            <button className="whatif-predict-button" onClick={() => onPredict(values)}>
+            <button
+                className="whatif-predict-button"
+                onClick={() => onPredict(values)}
+                type="submit"
+            >
               Predict
             </button>
 
@@ -267,8 +281,28 @@ export default function CounterfactualPanel({
 
           <div className="cf-options-list">
             {renderedOptions.map((option) => (
-              <div className="cf-option-card" key={option.option}>
-                <div className="cf-option-header">Option {option.option}</div>
+              <div className="cf-option-card"
+                   key={option.option}
+                   style={{
+                     borderLeft: `6px solid ${option.color ?? "#999"}`,
+                   }}
+                   onMouseEnter={() => onHoverOption?.(option.index ?? null)}
+                   onMouseLeave={() => onHoverOption?.(null)}
+                   onClick={() => onSelectOption?.(option.index ?? 0)}
+              >
+                <div className="cf-option-header">
+                  <span
+                    style={{
+                      display: "inline-block",
+                      width: 10,
+                      height: 10,
+                      borderRadius: "50%",
+                      backgroundColor: option.color,
+                      marginRight: 8,
+                    }}
+                  />
+                  {option.label ?? `Option ${option.option}`}
+                </div>
 
                 <div className="cf-option-body">
                   <div className="cf-option-left">
