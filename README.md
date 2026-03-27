@@ -24,17 +24,20 @@ python -m venv .venv
 source .venv/bin/activate        # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 python app.py
+```bash
 
 # Frontend
 ```bash
 cd frontend
 npm install
 npm run dev
+```bash
 
 # Notebook (one-time export)
 To regenerate the pre-computed JSON exports:
 ```bash
 jupyter notebook "final version (hopefully).ipynb"
+```bash
 The final export cell will generate 'atlas_points.json', 'atlas_grid.json', 'lime_contributions.json', and 'strategy_umap_model'. Copy these to the appropriate location in backend/data/StrategyAtlas. 
 
 Note: Re-running the notebook will produce a different StrategyAtlas layout due to ParametricUMAP's stochastic neural network training. If you regenerate the exports, all JSON files and the saved model must be regenerated together to remain consistent.
