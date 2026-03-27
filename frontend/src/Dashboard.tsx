@@ -357,6 +357,11 @@ export default function Dashboard() {
   }, [selection]);
 
   useEffect(() => {
+    setPrediction(null);
+    setCounterfactualOptions([]);
+  }, [target, selection]);
+
+  useEffect(() => {
     setBackendPrediction(null);
     setLocalExplanation(null);
     setCounterfactualOptions([]);
@@ -876,6 +881,7 @@ export default function Dashboard() {
   };
 
   async function handleShowInGraph(values: Record<string, string>) {
+    console.log("Show in graph")
     const existingPoint = data.find((point) =>
       pointMatchesWhatIfValues(point, values)
     );

@@ -196,7 +196,7 @@ export default function FeatureImportancePanel({
               layout={{
                 autosize: true,
                 height: 15,
-                margin: { l: 60, r: 20, t: 0, b: 24 },
+                margin: { l: 85, r: 20, t: 0, b: 24 },
                 xaxis: {
                   range: [0, maxValue],
                   showgrid: false,

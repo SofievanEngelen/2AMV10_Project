@@ -215,8 +215,6 @@ def _get_model_bundle(df: pd.DataFrame, target: str) -> Dict:
         ("preprocessor", preprocessor),
         ("classifier", RandomForestClassifier(
             n_estimators=100,
-            min_samples_leaf=20,
-            max_depth=6,
             random_state=42,
         )),
     ])
