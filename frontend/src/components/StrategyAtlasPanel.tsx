@@ -2,7 +2,7 @@ import PlotModule from "react-plotly.js";
 import "../App.css";
 import type { PlotSelectionEvent, PlotMouseEvent } from "plotly.js";
 import { useRef } from "react";
-import type { StudentPoint } from "../Dashboard";
+import type { StudentPoint } from "../Dashboard_old.tsx";
 
 const Plot = (PlotModule as any).default ?? PlotModule;
 
@@ -18,6 +18,32 @@ type StrategyAtlasBackground = {
   feature_labels: string[];
 };
 
+type CounterfactualPreviewOption = {
+  color?: string;
+  symbol?: string;
+  label?: string;
+};
+
+type ColourOptionValue =
+  | "cluster"
+  | "burnout_level"
+  | "productivity_score"
+  | "exam_score"
+  | "study_hours"
+  | "self_study_hours"
+  | "online_classes_hours"
+  | "social_media_hours"
+  | "gaming_hours"
+  | "sleep_hours"
+  | "screen_time_hours"
+  | "exercise_minutes"
+  | "caffeine_intake_mg"
+  | "mental_health_score"
+  | "focus_index"
+  | "age"
+  | "part_time_job"
+  | "upcoming_deadline";
+
 type Props = {
   data: StudentPoint[];
   background?: StrategyAtlasBackground | null;
@@ -26,7 +52,7 @@ type Props = {
   colourBy: string;
   strategyColors: string[];
   onColourByChange: (value: string) => void;
-  counterfactualOptions?: any[];
+  counterfactualOptions?: CounterfactualPreviewOption[];
   activeCfIndex?: number | null;
   selection: SelectionState;
   onPointSelect: (point: StudentPoint) => void;
@@ -55,6 +81,49 @@ const colourOptions = [
   { value: "upcoming_deadline", label: "Upcoming deadline" },
 ] as const;
 
+/** Convert the selected colour dimension into a numeric value per student point. */
+function getContinuousValue(
+  point: StudentPoint,
+  key: ColourOptionValue | string
+): number {
+  switch (key) {
+    case "burnout_level":
+    case "productivity_score":
+    case "exam_score":
+    case "study_hours":
+    case "self_study_hours":
+    case "online_classes_hours":
+    case "social_media_hours":
+    case "gaming_hours":
+    case "sleep_hours":
+    case "screen_time_hours":
+    case "exercise_minutes":
+    case "caffeine_intake_mg":
+    case "mental_health_score":
+    case "focus_index":
+    case "age":
+      return Number(point[key as keyof StudentPoint] ?? 0);
+
+    case "part_time_job":
+      return String(point.part_time_job) === "Yes" ? 1 : Number(point.part_time_job ?? 0);
+
+    case "upcoming_deadline":
+      return String(point.upcoming_deadline) === "Yes"
+        ? 1
+        : Number(point.upcoming_deadline ?? 0);
+
+    default:
+      return 0;
+  }
+}
+
+/** Return the IDs currently selected in the atlas. */
+function getSelectedIds(selection: SelectionState): string[] {
+  if (selection.type === "point") return [selection.point.id];
+  if (selection.type === "cluster") return selection.points.map((p) => p.id);
+  return [];
+}
+
 export default function StrategyAtlasPanel({
   data,
   background,
@@ -67,7 +136,7 @@ export default function StrategyAtlasPanel({
   onPointSelect,
   onClusterSelect,
   onClearSelection,
-  counterfactualOptions,
+  counterfactualOptions = [],
   activeCfIndex,
 }: Props) {
   const suppressClickRef = useRef(false);
@@ -79,48 +148,9 @@ export default function StrategyAtlasPanel({
     return strategyColors[point.cluster % strategyColors.length];
   });
 
-  const getContinuousValue = (point: StudentPoint, key: string): number => {
-    switch (key) {
-      case "burnout_level":
-        return Number(point.burnout_level ?? 0);
-      case "productivity_score":
-        return Number(point.productivity_score ?? 0);
-      case "exam_score":
-        return Number(point.exam_score ?? 0);
-      case "study_hours":
-        return Number((point as any).study_hours ?? 0);
-      case "self_study_hours":
-        return Number((point as any).self_study_hours ?? 0);
-      case "online_classes_hours":
-        return Number((point as any).online_classes_hours ?? 0);
-      case "social_media_hours":
-        return Number((point as any).social_media_hours ?? 0);
-      case "gaming_hours":
-        return Number((point as any).gaming_hours ?? 0);
-      case "sleep_hours":
-        return Number((point as any).sleep_hours ?? 0);
-      case "screen_time_hours":
-        return Number((point as any).screen_time_hours ?? 0);
-      case "exercise_minutes":
-        return Number((point as any).exercise_minutes ?? 0);
-      case "caffeine_intake_mg":
-        return Number((point as any).caffeine_intake_mg ?? 0);
-      case "mental_health_score":
-        return Number(point.mental_health_score ?? 0);
-      case "focus_index":
-        return Number(point.focus_index ?? 0);
-      case "age":
-        return Number(point.age ?? 0);
-      case "part_time_job":
-        return (point as any).part_time_job === "Yes" ? 1 : 0;
-      case "upcoming_deadline":
-        return (point as any).upcoming_deadline === "Yes" ? 1 : 0;
-      default:
-        return 0;
-    }
-  };
-
-  const continuousValues = data.map((point) => getContinuousValue(point, colourBy));
+  const continuousValues = data.map((point) =>
+    getContinuousValue(point, colourBy)
+  );
   const minVal = Math.min(...continuousValues);
   const maxVal = Math.max(...continuousValues);
   const safeMax = minVal === maxVal ? minVal + 1e-6 : maxVal;
@@ -160,8 +190,10 @@ export default function StrategyAtlasPanel({
       }
     : null;
 
+  const activeCf = activeCfIndex != null ? counterfactualOptions[activeCfIndex] : null;
+
   const previewTrace =
-    previewPoint && counterfactualOptions && activeCfIndex != null
+    previewPoint && activeCf
       ? {
           x: [previewPoint.x],
           y: [previewPoint.y],
@@ -170,17 +202,15 @@ export default function StrategyAtlasPanel({
           showlegend: false,
           marker: {
             size: 12,
-            color: counterfactualOptions[activeCfIndex]?.color ?? "#999",
-            symbol: counterfactualOptions[activeCfIndex]?.symbol ?? "circle",
+            color: activeCf.color ?? "#999",
+            symbol: activeCf.symbol ?? "circle",
           },
-          hovertemplate: `${
-            counterfactualOptions[activeCfIndex]?.label ?? "Strategy"
-          }<extra></extra>`,
+          hovertemplate: `${activeCf.label ?? "Strategy"}<extra></extra>`,
         }
       : null;
 
   const previewLineTrace =
-    temporaryPoint && previewPoint && counterfactualOptions && activeCfIndex != null
+    temporaryPoint && previewPoint && activeCf
       ? {
           x: [temporaryPoint.x, previewPoint.x],
           y: [temporaryPoint.y, previewPoint.y],
@@ -189,31 +219,26 @@ export default function StrategyAtlasPanel({
           showlegend: false,
           hoverinfo: "skip" as const,
           line: {
-            color: counterfactualOptions[activeCfIndex]?.color ?? "#999",
+            color: activeCf.color ?? "#999",
             width: 2,
             dash: "dash",
           },
         }
       : null;
 
-  const selectedIds =
-    selection.type === "point"
-      ? [selection.point.id]
-      : selection.type === "cluster"
-      ? selection.points.map((p) => p.id)
-      : [];
+  const selectedIds = getSelectedIds(selection);
 
   const pointIndices = data
-    .map((d, i) => (selectedIds.includes(d.id) ? i : -1))
-    .filter((i) => i !== -1);
+    .map((point, index) => (selectedIds.includes(point.id) ? index : -1))
+    .filter((index) => index !== -1);
 
   const handleClick = (event: Readonly<PlotMouseEvent>) => {
     if (suppressClickRef.current) return;
 
-    const p = event.points?.[0];
-    if (!p) return;
+    const clickedPoint = event.points?.[0];
+    if (!clickedPoint) return;
 
-    const pointIndex = p.pointIndex;
+    const pointIndex = clickedPoint.pointIndex;
     if (pointIndex == null) return;
 
     onPointSelect(data[pointIndex]);
@@ -222,22 +247,22 @@ export default function StrategyAtlasPanel({
   const handleSelected = (event: Readonly<PlotSelectionEvent>) => {
     if (!event?.points || event.points.length === 0) return;
 
-    const unique = Array.from(
+    const uniqueIndices = Array.from(
       new Set(
         event.points
-          .map((p) => p.pointIndex)
-          .filter((i): i is number => i != null)
+          .map((point) => point.pointIndex)
+          .filter((index): index is number => index != null)
       )
     );
 
-    if (unique.length === 0) return;
+    if (uniqueIndices.length === 0) return;
 
     suppressClickRef.current = true;
     window.setTimeout(() => {
       suppressClickRef.current = false;
     }, 150);
 
-    onClusterSelect(unique.map((i) => data[i]));
+    onClusterSelect(uniqueIndices.map((index) => data[index]));
   };
 
   const marker =
@@ -282,11 +307,11 @@ export default function StrategyAtlasPanel({
           data={[
             ...(backgroundTrace ? [backgroundTrace] : []),
             {
-              x: data.map((d) => d.x),
-              y: data.map((d) => d.y),
+              x: data.map((point) => point.x),
+              y: data.map((point) => point.y),
               type: "scatter",
               mode: "markers",
-              customdata: data.map((d) => d.id),
+              customdata: data.map((point) => point.id),
               selectedpoints: pointIndices,
               marker,
               selected: {
@@ -337,7 +362,7 @@ export default function StrategyAtlasPanel({
             modeBarButtonsToAdd: ["lasso2d", "select2d"],
           }}
           style={{ width: "100%", height: "100%" }}
-          useResizeHandler={true}
+          useResizeHandler
           onClick={handleClick}
           onSelected={handleSelected}
           onDoubleClick={() => {
