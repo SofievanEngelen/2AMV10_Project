@@ -319,13 +319,7 @@ into a coherent **Visual Analytics (VA)** workflow.
 
 ## Acknowledgements
 
-This project builds on concepts and tools from:
-
-- Visual Analytics
-- Explainable AI (XAI)
-- Dimensionality Reduction
-- Counterfactual Explanations
-- Human-Centered ML Interpretation
+For this project, we made use of generative AI to help polish code and fix bugs. This was mainly ChatGPT and Claude.
 
 ---
 
