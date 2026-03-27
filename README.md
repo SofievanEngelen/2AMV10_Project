@@ -18,6 +18,7 @@ Python 3.9+
 Node.js 18+
 
 # Backend setup
+```bash
 cd backend
 python -m venv .venv
 source .venv/bin/activate        # Windows: .venv\Scripts\activate
@@ -25,12 +26,14 @@ pip install -r requirements.txt
 python app.py
 
 # Frontend
+```bash
 cd frontend
 npm install
 npm run dev
 
 # Notebook (one-time export)
 To regenerate the pre-computed JSON exports:
+```bash
 jupyter notebook "final version (hopefully).ipynb"
 The final export cell will generate 'atlas_points.json', 'atlas_grid.json', 'lime_contributions.json', and 'strategy_umap_model'. Copy these to the appropriate location in backend/data/StrategyAtlas. 
 
